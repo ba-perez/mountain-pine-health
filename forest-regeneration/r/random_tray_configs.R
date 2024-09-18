@@ -21,9 +21,11 @@ num_plates <- 72
 plate_size <- c(4, 6)
 
 # fix position of microclimate logger 'L' in plate
-position_L <- c(2, 2)
+position_L <- c(3, 3)
 
 # generate plate with random positions
+set.seed(69)
+
 generate_plate <- function() {
   # empty plate
   plate <- matrix('', nrow = plate_size[1], ncol = plate_size[2])
@@ -63,16 +65,22 @@ display_plate <- function(plate, plate_number) {
   # remove unnecessary row names
   plate_df <- as.data.frame(shuffled_plate)
   rownames(plate_df) <- NULL
-
+  
   print(kable(plate_df, format = "pipe", align = "c", col.names = NULL))
   cat("\n")
 }
 
-# generate plates
+# generate one plate for testing
 if (TEST) {
-  num_plates <- 1 # Test mode: produce only one plate
-} else {
-  num_plates <- 72 # Normal mode: produce all plates
+  test_plate <- generate_plate()
+  display_plate(test_plate, "test")
 }
 
-plates <- replicate(num_plates, generate_plate(), simplify = FALSE)
+# generate all 72 plates
+if (!TEST) {
+  num_plates <- 72
+  plates <- lapply(1:num_plates, function(x) generate_plate())
+  for (i in seq_along(plates)) {
+    display_plate(plates[[i]], i)
+  }
+}
