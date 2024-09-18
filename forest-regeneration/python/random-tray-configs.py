@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 # CONTROL STATION
-TEST = False # Test version ON/OFF (will only produce one plate)
+TEST = True # Test version ON/OFF (will only produce one plate)
 
 # define objects and their counts
 # 3 control pots ('C') have soil but no seeds, 5 pots for each of the 4 species in the experiment
