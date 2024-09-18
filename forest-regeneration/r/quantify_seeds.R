@@ -1,6 +1,6 @@
-### Calculate the number of seeds out of their weight
+### Calculate the number of seeds out of their weight -- R version
 ### Coder: Barbara Araujo
-### 2024.01.31.
+### Date: 2024.09.18.
 
 # The TGK (Tausendkorngewicht) is an established parameter in seed trade
 # and indicates the weight of 1000 seeds for a given species
