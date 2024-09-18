@@ -33,7 +33,7 @@ def quantify_seeds(tree_dict):
 # Min. TKG of the species (g)
 # Max. TKG of the species (g)
 # Available (bought) seed weight (g)
-# Source for TGK: gebirgswald.ch, confirmed by Lexica from Schuck et al.
+# Source for TKG: gebirgswald.ch, confirmed by Lexica from Schuck et al.
 tree_dictionary = [
     ["Picea abies", 4, 8, 100],
     ["Pinus cembra", 150, 300, 2000],
