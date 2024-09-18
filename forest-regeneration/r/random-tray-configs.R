@@ -12,7 +12,7 @@ library(glue)
 library(knitr)
 
 # CONTROL STATION
-TEST <- FALSE # Test version ON/OFF (will only produce one plate)
+TEST <- TRUE # Test version ON/OFF (will only produce one plate)
 
 # define objects and their counts
 # 3 control pots ('C') have soil but no seeds, 5 pots for each of the 4 species in the experiment
