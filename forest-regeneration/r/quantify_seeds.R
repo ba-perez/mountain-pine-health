@@ -2,7 +2,7 @@
 ### Coder: Barbara Araujo
 ### Date: 2024.09.18.
 
-# The TGK (Tausendkorngewicht) is an established parameter in seed trade
+# The TKG (Tausendkorngewicht) is an established parameter in seed trade
 # and indicates the weight of 1000 seeds for a given species
 # It will be used to quantify the amount of seeds bought for the study
 
@@ -31,10 +31,10 @@ quantify_seeds <- function(tree_dict) {
 
 # create dictionary with:
 # Species' scientific name
-# Min. TGK of the species (g)
-# Max. TGK of the species (g)
+# Min. TKG of the species (g)
+# Max. TKG of the species (g)
 # Available (bought) seed weight (g)
-# Source for TGK: gebirgswald.ch, confirmed by Lexica from Schuck et al.
+# Source for TKG: gebirgswald.ch, confirmed by Lexica from Schuck et al.
 tree_dictionary <- list(
   c("Picea abies", 4, 8, 100),
   c("Pinus cembra", 150, 300, 2000),
