@@ -3,7 +3,8 @@
 ### 2024.01.31.
 
 # The TGK (Tausendkorngewicht) is an established parameter in seed trade
-# and indicates the mass of 1000 seeds for a given species.
+# and indicates the weight of 1000 seeds for a given species
+# It will be used to quantify the amount of seeds bought for the study
 
 # function to calculate number of seeds out of their weight
 quantify_seeds <- function(tree_dict) {
