@@ -7,5 +7,4 @@ All scripts related to the project on mountain pine health by Barbara M. P. B. d
     Then continue working <br />
 
 ## To do
-- Describe randomiser scripts (Python and R)
-- Test R randomiser script
+- Describe scripts (Python and R)
