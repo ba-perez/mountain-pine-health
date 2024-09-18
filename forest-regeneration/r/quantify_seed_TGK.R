@@ -2,23 +2,24 @@
 ### Coder: Barbara Araujo
 ### 2024.01.31.
 
-# Define function
+# The TGK (Tausendkorngewicht) is an established parameter in seed trade
+# and indicates the mass of 1000 seeds for a given species.
+
+# function to calculate number of seeds out of their weight
 quantify_seeds <- function(tree_dict) {
   total_seeds <- 0
-  
-  # Loop through each item in the dictionary
+
   for (item in tree_dict) {
     tree_name <- item[[1]]
     min_weight <- as.numeric(item[[2]])
     max_weight <- as.numeric(item[[3]])
     available_weight <- as.numeric(item[[4]])
     
-    # Calculate the number of available seeds (rounded down)
+    # calculate number of available seeds, rounded down
     max_seed_count <- floor((available_weight * 1000) / (min_weight))
     min_seed_count <- floor((available_weight * 1000) / (max_weight))
     mean_seed_count <- floor(mean(c(min_seed_count, max_seed_count)))
       
-    # Print the result for each tree
     cat(
       "For", tree_name,
       "\nNo. of available seeds:", min_seed_count, "-", max_seed_count,
@@ -27,11 +28,11 @@ quantify_seeds <- function(tree_dict) {
   }
 }
 
-# Create a dictionary with:
+# create dictionary with:
 # Species' scientific name
-# Min. TGK (Tausendkorngewicht) of the species, in grams
-# Max. TGK of the species
-# Available (bought) seed weight
+# Min. TGK of the species (g)
+# Max. TGK of the species (g)
+# Available (bought) seed weight (g)
 # Source for TGK: gebirgswald.ch, confirmed by Lexica from Schuck et al.
 tree_dictionary <- list(
   c("Picea abies", 4, 8, 100),
@@ -40,5 +41,5 @@ tree_dictionary <- list(
   c("Sorbus aucuparia", 3.5, 5, 200)
 )
 
-# Apply function
+# apply function
 quantify_seeds(tree_dictionary)
