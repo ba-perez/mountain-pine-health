@@ -3,8 +3,8 @@ All scripts related to the project on mountain pine health by Barbara M. P. B. d
 
 ## First things first
 - Are all files up to date?
-    Either update them or add a to-do below
-    Then continue working
+    Either update them or add a to-do below <br />
+    Then continue working <br />
 
 ## To do
 - Describe randomiser scripts (Python and R)
