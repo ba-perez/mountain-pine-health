@@ -2,6 +2,8 @@
 ### Coder: Barbara Araujo
 ### Date: 2024.09.17.
 
+# IMPORT PACKAGES
+
 # randomiser
 import random
 random.seed(69)
@@ -10,19 +12,16 @@ random.seed(69)
 from rich.console import Console
 from rich.table import Table
 
-# export outputs
-import pandas as pd
-
-# Control station
-# Test version ON/OFF (will only produce one plate)
-TEST = False
+# CONTROL STATION
+TEST = False # Test version ON/OFF (will only produce one plate)
 
 # define objects and their counts
-objects = ['E']*3 + ['P. abies']*5 + ['P. cembra']*5 + ['A. pseudoplatanus']*5 + ['S. aucuparia']*5
+# 3 control pots ('C') have soil but no seeds, 5 pots for each of the 4 species in the experiment
+objects = ['C']*3 + ['P. abies']*5 + ['P. cembra']*5 + ['A. pseudoplatanus']*5 + ['S. aucuparia']*5
 num_plates = 72
 plate_size = (4, 6)
 
-# fix position of logger 'L' (row, col).
+# fix position of microclimate logger 'L' in plate
 position_L = (2, 2)
 
 # generate plate with random positions
@@ -49,14 +48,14 @@ def display_plate(plate, plate_number):
     for _ in range(plate_size[1]):
         table.add_column(justify="center")
 
-    # dictionary for all objects
+    # rename objects for visualisation
     symbol_map = {
-        'E': '[black]leer[/black]',
+        'C': '[black]control[/black]',
         'L': '[black]logger[/black]',
-        'P. abies': '[bright_blue]P. abi[/bright_blue]',
-        'P. cembra': '[green4]P. cem[/green4]',
-        'A. pseudoplatanus': '[bright_red]A. pse[/bright_red]',
-        'S. aucuparia': '[gold3]S. auc[/gold3]'
+        'P. abies': '[bright_blue]Piab[/bright_blue]',
+        'P. cembra': '[green4]Pice[/green4]',
+        'A. pseudoplatanus': '[bright_red]Acps[/bright_red]',
+        'S. aucuparia': '[gold3]Soau[/gold3]'
     }
 
     # populate and print table
@@ -70,7 +69,7 @@ def display_plate(plate, plate_number):
 if TEST:
 
     test_plate = generate_plate()
-    display_plate(test_plate, "test")
+    display_plate(test_plate, "test plate")
 
 # generate all 72 plates
 if not TEST:
@@ -78,5 +77,3 @@ if not TEST:
     plates = [generate_plate() for _ in range(num_plates)]
     for i, plate in enumerate(plates, start=1):
         display_plate(plate, i)
-
-
