@@ -1,9 +1,7 @@
-# %%
 ### Randomise seed and control placement in propagation trays -- Python version
 ### Coder: Barbara Araujo
 ### Date: 2024.09.17.
 
-# %%
 # randomiser
 import random
 random.seed(69)
@@ -15,13 +13,10 @@ from rich.table import Table
 # export outputs
 import pandas as pd
 
-# %%
 # Control station
-
 # Test version ON/OFF (will only produce one plate)
 TEST = False
 
-# %%
 # define objects and their counts
 objects = ['E']*3 + ['P. abies']*5 + ['P. cembra']*5 + ['A. pseudoplatanus']*5 + ['S. aucuparia']*5
 num_plates = 72
@@ -30,7 +25,6 @@ plate_size = (4, 6)
 # fix position of logger 'L' (row, col).
 position_L = (2, 2)
 
-# %%
 # generate plate with random positions
 def generate_plate():
     # empty plate
@@ -47,7 +41,6 @@ def generate_plate():
 
     return plate
 
-# %%
 # display plate
 def display_plate(plate, plate_number):
     console = Console()
@@ -73,14 +66,12 @@ def display_plate(plate, plate_number):
     console.print(f"Plate {plate_number}")
     console.print(table)
 
-# %%
 # generate one plate for testing
 if TEST:
 
     test_plate = generate_plate()
     display_plate(test_plate, "test")
 
-# %%
 # generate all 72 plates
 if not TEST:
 
