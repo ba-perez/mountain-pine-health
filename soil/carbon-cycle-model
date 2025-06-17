@@ -1,0 +1,707 @@
+### Simulate soil carbon dynamics using field and iLand data
+### Coders: 
+###   Werner Rammer (iLand code)
+###   Barbara M. P. B. de Araujo (carbon cycle code; field data)
+###   Christina Dollinger (iLand simulation data)
+### Last updated: 2025.06.17
+
+#### FIRST THINGS FIRST ####
+
+rm(list = ls())
+
+gc()
+
+options(
+  scipen=999, # disable scientific notation
+  digits = 7
+)
+
+setwd(r"(\\path\to\work\directory)")
+
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+library(grid)
+library(cowplot)
+
+#### CARBON CYCLE - SINGLE LOOP ####
+
+calculateYear <- function(
+    InputLab_C,  # Input to the labile pool (litter) (t/ha)
+    InputRef_C,  # Input to the refractory pool (deadwood) (t/ha)
+    YL_C_init,   # Initial carbon in young labile pool (t/ha)
+    YR_C_init,   # Initial carbon in young refractory pool (t/ha)
+    SOM_C_init,  # Initial carbon in soil organic matter (t/ha)
+    Kyl,         # Litter decomposition rate
+    Kyr,         # Deadwood decomposition rate
+    RE,          # Climate factor 're'
+    sp,          # Soil parameters (list)
+    Ko           # SOM decomposition rate
+) {
+  
+  # Timestep (annual)
+  t <- 1 
+  
+  # Calculate total input
+  total_in_C <- InputLab_C + InputRef_C
+  
+  # --- Steady state calculations ---
+  
+  # Young labile pool (Yl) steady state C (eq A13)
+  ylss <- InputLab_C / (Kyl * RE)  
+  
+  # eta l in the paper
+  #cl <- sp$el * (1 - sp$mH) / sp$qb - sp$mH * (1 - sp$el) / sp$qh # calculations involving C/N ratio
+  
+  # Young refractory pool (Yr) steady state C (eq A14)
+  yrss <- InputRef_C / (Kyr * RE) 
+  
+  # Soil organic matter (SOM) steady state C 
+  oss <- sp$mH * total_in_C / (Ko * RE)  
+  
+  # Auxiliary calculations
+  al <- sp$mH * (Kyl * RE * YL_C_init - InputLab_C) / ((Ko - Kyl) * RE)
+  ar <- sp$mH * (Kyr * RE * YR_C_init - InputRef_C) / ((Ko - Kyr) * RE)
+  
+  # --- Update state variables ---
+  
+  # Precalculations
+  lfactor <- exp(-Kyl * RE * t)
+  rfactor <- exp(-Kyr * RE * t)
+  
+  # Young labile pool (eq A18)
+  YL_C <- ylss + (YL_C_init - ylss) * lfactor
+  
+  # Young refractory pool (eq A19)
+  YR_C <- yrss + (YR_C_init - yrss) * rfactor
+  
+  # SOM pool (old)
+  SOM_C <- oss + (SOM_C_init - oss - al - ar) * exp(-Ko * RE * t) + al * lfactor + ar * rfactor
+  
+  # --- Return new states ---
+  return(list(
+    YL_C = YL_C,   # Carbon in young labile pool (t/ha)
+    YR_C = YR_C,   # Carbon in young refractory pool (t/ha)
+    SOM_C = SOM_C,  # Carbon in soil organic matter (t/ha)
+    oss = oss
+  ))
+}
+
+#### ILAND VARIABLES ####
+
+# One for each elevation category c(low, mid, high) in a list
+
+# soil parameters
+sp_list <- list(
+  el = 0.1520,     # Microbial efficiency in labile pool
+  er = 0.3190,     # Microbial efficiency in refractory pool
+  mH = 0.2200      # Humification rate
+)
+
+InputLab_C = c(3.7273, 2.0527, 1.2239)  # Labile input to refractory pool (t/ha) under HEALTHY mountain pines
+InputRef_C = c(5.1481, 3.5228, 2.0256)  # Deadwood input to refractory pool (t/ha)
+YL_C_init = c(12.3913, 8.9807, 8.2594)  # Initial carbon in young labile pool (t/ha)
+YR_C_init = c(8.9623, 7.7192, 6,9302)   # Initial carbon in young refractory pool (t/ha)
+Kyl = NA                                # Litter decomposition rate - will be defined later
+Kyr = NA                                # Deadwood decomposition rate - will be defined later
+RE = c(0.8414, 0.6813, 0.5064)          # Climate modifier
+sp = sp_list
+
+# Mean live carbon stocks turned into carbon inputs upon tree death:
+foliage_C = c(6.474402, 2.646155, 1.297102)      # foliage + fine roots (t/ha)
+woody_C = c(98.3658, 68.67399, 38.77613)      # stems + branches + coarse roots (t/ha)
+
+#### FIELD VARIABLES ####
+
+# One for each elevation category c(low, mid, high) in a list
+
+# Mean carbon stocks (t/ha) by mountain pine health condition
+healthy_SOM = c(39.0258, 72.5112, 96.3888)
+ailing_SOM = c(60.9152, 57.0527, 137.2102)
+unstocked_SOM = c(17.4830, 18.5320, 50.2098)
+
+# find upper confidence interval (CI) of unstocked plots
+# to determine when SOC reaches the final carbon equilibrium
+# unstocked_means <- c(17.4830, 18.5320, 50.2098) # mean SOC in all unstocked plots
+# unstocked_sd <- c(18.7899, 19.7060, 26.5893)    # SOC std. dev. in all unstocked plots
+# unstocked_samples <- c(8, 8, 9)                 # sample size of all unstocked plots
+# CI <- c(
+#   mean(sample) - 1.96 * sd(sample)/sqrt(sample_size),
+#   mean(sample) + 1.96 * sd(sample)/sqrt(sample_size)
+# )
+unstocked_upper_CI <- c(30.5037, 32.1876, 67.581)
+
+#### FIND DECOMPOSITION RATES (Ko, Kyl, Kyr) ####
+
+# For healthy scenario in steady state (ss)
+
+# parameters explained:
+
+# InputLab_C = input to labile pool in healthy state
+    # from iLand simulations
+# InputRef_C = input to refractory pool in healthy state
+    # from iLand simulations
+# healthy_SOM = SOM_C_init in healthy state
+    # for our purposes, same as SOM in ss (oss in single loop)
+# YL_C_init = initial carbon in young labile pool
+    # for our purposes, same as YL_C in ss (ylss in single loop)
+# YR_C_init = initial carbon in young refractory pool
+    # for our purposes, same as YR_C in ss (yrss in single loop)
+
+stablestates <- function(InputLab_C, InputRef_C, YL_C_init, YR_C_init, SOM_C_init, RE, sp, years) {
+  
+  elevations <- c("low", "intermediate", "high")
+  
+  plot_df <- data.frame(
+    year = numeric(),
+    SOM_C = numeric(),
+    elevation = character()
+  )
+  
+  decomp_values <- data.frame(
+    elevation = character(),
+    Ko = numeric(),
+    Kyl = numeric(),
+    Kyr = numeric()
+  )
+  
+  # Loop through elevations
+  for (i in seq_along(elevations)) {
+    
+    # Calculate Ko, Kyl, Kyr
+    total_in_C <- InputLab_C[i] + InputRef_C[i]
+    Ko <- (sp$mH * total_in_C) / (SOM_C_init[i] * RE[i])
+    
+    Kyl <- InputLab_C[i] / (YL_C_init[i] * RE[i])
+    Kyr <- InputRef_C[i] / (YR_C_init[i] * RE[i])
+    
+    # Append to df
+    decomp_values <- rbind(
+      decomp_values,
+      data.frame(
+        elevation = elevations[i],
+        Ko = Ko,
+        Kyl = Kyl,
+        Kyr = Kyr
+      )
+    )
+    
+    YL_C_values <- numeric(years)
+    YR_C_values <- numeric(years)
+    SOM_C_values <- numeric(years)
+    
+    for (t in 1:years) {
+      output <- calculateYear(
+        InputLab_C[i], InputRef_C[i],
+        YL_C_init[i], YR_C_init[i],
+        SOM_C_init[i], Kyl, Kyr, RE[i], sp, Ko
+      )
+      
+      # Store results for this year
+      YL_C_values[t] <- output$YL_C
+      YR_C_values[t] <- output$YR_C
+      SOM_C_values[t] <- output$SOM_C
+      
+      # Update values for next year
+      YL_C_init[i] <- output$YL_C
+      YR_C_init[i] <- output$YR_C
+      SOM_C_init[i] <- output$SOM_C
+    }
+    
+    # Add results to the combined df
+    plot_df <- rbind(
+      plot_df,
+      data.frame(
+        year = 1:years,
+        SOM_C = SOM_C_values,
+        elevation = elevations[i]
+      )
+    )
+  }
+    
+  # Plot all elevations
+  combined_plot <- ggplot(plot_df, aes(x = year, y = SOM_C, colour = elevation, group = elevation)) +
+    geom_line() +
+    geom_point() +
+    labs(
+      x = "year",
+      y = "Soil Organic Carbon (t ha-1)"
+    ) +
+    scale_y_continuous(
+      limits = c(0, max(plot_df$SOM_C) + 10),
+      breaks = seq(0, max(plot_df$SOM_C) + 10, by = 25)
+    ) +
+    scale_colour_manual(
+      values = c("low" = "skyblue2", "intermediate" = "royalblue2", "high" = "darkblue"),
+      limits = c("high", "intermediate", "low") # reorder legend
+    ) +
+    theme(
+      panel.border = element_blank(),
+      panel.grid.major.y = element_line(),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.x = element_line(),
+      panel.grid.minor.x = element_blank(),
+      panel.background = element_rect(fill = "white", colour = NA),
+      plot.background = element_rect(fill = "white", colour = NA),
+      axis.line = element_blank(),
+      axis.title.x = element_text(size = 13, margin = margin(t = 12), colour = "grey50"),
+      axis.title.y = element_text(size = 13, margin = margin(r = 12), hjust = 1, colour = "grey50"),
+      axis.text.x = element_text(size = 14, colour = "grey50"),
+      axis.text.y = element_text(size = 14, colour = "grey50")
+    )
+  
+  return(list(
+    SOM_C_plot = combined_plot,
+    SOM_C_values = plot_df,
+    decomp_values = decomp_values
+  ))
+
+}
+
+healthy_ss <- stablestates(
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init,
+  healthy_SOM, RE, sp_list, years = 250
+)
+
+#healthy_ss$SOM_C_plot
+
+healthy_ss$decomp_values # results in:
+healthyKo = c(0.05946430, 0.02482922, 0.01464600)
+healthyKyl = c(0.3574991, 0.3354879, 0.2926198)
+healthyKyr = c(0.6826923, 0.6698496, 0.6666667)
+
+#### FIND UNSTOCKED INPUTLAB_C ####
+
+# Based on single loop formulae:
+# total_in_C <- InputLab_C + InputRef_C
+# oss <- sp$mH * total_in_C / (Ko * RE)
+# since InputRef_C in unstocked is 0 (no woody vegetation):
+# InputLab_C <- (oss * Ko * Re) / sp$mH
+
+# Applying formula to each elevation directly
+# by mountain pine health condition:
+iLab_unstocked_low <- 3.976052 #(17.4830 * 0.05946430 * 0.8414) / 0.22
+iLab_unstocked_inter <- 1.424955 #(18.5320 * 0.02482922 * 0.6813) / 0.22
+iLab_unstocked_high <- 1.692694 #(50.2098 * 0.01464600 * 0.5064) / 0.22
+
+# Unstocked inputlab_C by elevation c(low, intermediate, high):
+iLab_unstocked <- c(3.976052, 1.424955, 1.692694)
+
+#### SIMULATE CARBON CYCLE UPON DIE-OFF ####
+
+# Starting at healthy scenario in steady state (ss)
+
+# parameters explained:
+
+# foliage_C = initial aboveground carbon in foliage + fine roots
+# woody_C = initial aboveground carbon in stems + branches + coarse roots
+# InputLab_C, InputRef_C = labile, refractory inputs under healthy steady state
+    # to be complemented by foliage, roots, wood carbon upon die-off
+# SOM_C_init = initial soil organic matter carbon, from field data
+# Ko, Kyl, Kyr = calculated decomposition rates under healthy steady state
+
+simulate_dieoff <- function(
+    RE, foliage_C, woody_C,
+    InputLab_C, InputRef_C, YL_C_init, YR_C_init,
+    sp, Ko, Kyl, Kyr, SOM_C_init, InputLab_f,
+    dieoff_dur, erosion_pwr, erosion_year,
+    sim_years
+  ) {
+  
+  elevations <- c("low", "intermediate", "high")
+
+  # Store values for plotting
+  plot_df <- data.frame(
+    elevation = character(),
+    year = numeric(),
+    SOM_C = numeric()
+  )
+  
+  for (i in seq_along(elevations)) {
+    
+    # Initialise results for this elevation
+    elevation_results <- data.frame(
+      year = 1:sim_years,
+      SOM_C = numeric(sim_years)
+    )
+    
+    InputLab <- InputLab_C[i]
+    InputRef <- InputRef_C[i]
+    YL_C <- YL_C_init[i]
+    YR_C <- YR_C_init[i]
+    SOM_C <- SOM_C_init[i]
+    RE_factor <- RE[i]
+    Ko_factor <- Ko[i]
+    Kyl_factor <- Kyl[i]
+    Kyr_factor <- Kyr[i]
+    InputLab_final <- InputLab_f[i]
+
+    foliage_loss <- foliage_C[i] * (1/dieoff_dur) # 25% more foliage + fine roots from die-off
+    total_deadwood <- woody_C[i]
+    deadwood_input <- woody_C[i] / 10                                 # Woody C turned into deadwood after die-off
+    years_since_dieoff <- 0                                           # Initialise counter for deadwood input
+    
+    for (year in 1:sim_years) {
+      if (year <= dieoff_dur) {                                       # Litter input during die-off
+
+        InputLab <- InputLab + foliage_loss
+        InputRef <- InputRef
+
+      }
+
+      if (year > dieoff_dur) {                                        # Inputs after mountain pine death
+
+        InputLab <- InputLab_final
+        
+        # Deadwood input
+        years_since_dieoff <- years_since_dieoff + 1                  # Counter: years since die-off
+        
+        if (years_since_dieoff <= 10) {
+          
+          if (years_since_dieoff == erosion_year) {
+            
+            SOM_C <- SOM_C * (1 - erosion_pwr)                         # Remove fraction of SOM_C depending on erosion power
+
+            deadwood_input <- (
+              (deadwood_input * (10 + 1 - erosion_year))               # Deadwood still available
+              * (1 - erosion_pwr)                                      # Deadwood available after erosion
+              ) / (10 + 1 - erosion_year)                              # New yearly deadwood input
+            
+            InputRef <- deadwood_input
+            
+          }
+          
+          InputRef <- deadwood_input
+          
+        } else {
+          
+          InputRef <- 0                                               # No more deadwood input after 10 years since death
+          
+        }
+      }
+      
+      # Calculate new carbon pools w/ single loop
+      year_results <- calculateYear(
+        InputLab_C = InputLab,
+        InputRef_C = InputRef,
+        YL_C_init = YL_C,
+        YR_C_init = YR_C,
+        SOM_C_init = SOM_C,
+        Kyl = Kyl_factor,
+        Kyr = Kyr_factor,
+        RE = RE_factor,
+        sp = sp,
+        Ko = Ko_factor
+      )
+      
+      # Update pools for next iteration
+      SOM_C <- year_results$SOM_C
+      YL_C <- year_results$YL_C
+      YR_C <- year_results$YR_C
+      
+      # Store results for this year
+      elevation_results$SOM_C[year] <- SOM_C
+    }
+    
+    elevation_results$elevation <- elevations[i]
+    plot_df <- rbind(plot_df, elevation_results)
+    plot_df <- plot_df[, c("elevation", "year", "SOM_C")]
+    
+  }
+
+  # Plot code
+  combined_plot <- ggplot(plot_df, aes(x = year, y = SOM_C, colour = elevation, group = elevation)) +
+    geom_line() +
+    geom_point() +
+    labs(
+      x = "Year",
+      y = "Soil Organic Carbon (t ha-1)"
+    ) +
+    scale_y_continuous(
+      limits = c(0, max(plot_df$SOM_C) + 10),
+      breaks = seq(0, max(plot_df$SOM_C) + 10, by = 15)
+    ) +
+    scale_colour_manual(
+      values = c("low" = "skyblue2", "intermediate" = "royalblue2", "high" = "darkblue"),
+      limits = c("high", "intermediate", "low") # reorder legend
+    ) +
+    theme(
+      panel.border = element_blank(),
+      panel.grid.major.y = element_line(colour = "grey80"),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.x = element_line(),
+      panel.grid.minor.x = element_blank(),
+      panel.background = element_rect(fill = "white", colour = NA),
+      plot.background = element_rect(fill = "white", colour = NA),
+      axis.line = element_blank(),
+      axis.title.x = element_text(size = 13, margin = margin(t = 12), colour = "grey50"),
+      axis.title.y = element_text(size = 13, margin = margin(r = 12), hjust = 1, colour = "grey50"),
+      axis.text.x = element_text(size = 14, colour = "grey50"),
+      axis.text.y = element_text(size = 14, colour = "grey50")
+    )
+  
+  return(list(
+    results = plot_df,
+    plot = combined_plot
+  ))
+}
+
+sim_years = 750
+
+dieoff_results <- simulate_dieoff(
+  RE, foliage_C, woody_C,
+  InputLab_C, InputRef_C,  YL_C_init, YR_C_init,
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM,
+  InputLab_f = iLab_bare,
+  dieoff_dur = 5,
+  erosion_pwr = 0.2,
+  erosion_year = 5,
+  sim_years = sim_years
+)
+
+#dieoff_results$plot
+
+# TO DO: IMPLEMENT MEAN EROSION RESULTS FOR PUBLICATION OR AT LEAST MENTION THAT THEY COME LATER
+
+#### SENSITIVITY ANALYSES ####
+
+# Sensitivity analysis for die-off duration
+sens_dieoff_dur <- function(
+    dieoff_dur_values, RE, foliage_C, 
+    woody_C, InputLab_C, InputRef_C, 
+    YL_C_init, YR_C_init, sp, Ko, Kyl, Kyr, 
+    SOM_C_init, InputLab_f, SOM_C_fin,
+    erosion_pwr, erosion_year,
+    sim_years
+) {
+  
+  results_df <- data.frame(
+    elevation = character(),
+    dieoff_dur = numeric(),
+    SOM_start = numeric(),
+    SOM_at_dieoff = numeric(),
+    year_tipping_point = numeric(),
+    year_SOM_equals_bare = numeric()
+  )
+  
+  plot_data <- data.frame()
+  elevations <- c("low", "intermediate", "high")
+  bare_upper_CI <- c(30.5037, 32.1876, 67.581)
+  
+  for (dieoff_dur in dieoff_dur_values) {
+    sim_results <- simulate_dieoff(
+      RE, foliage_C, woody_C,
+      InputLab_C, InputRef_C, YL_C_init, YR_C_init,
+      sp, Ko, Kyl, Kyr, SOM_C_init, InputLab_f,
+      dieoff_dur, erosion_pwr, erosion_year,
+      sim_years
+    )$results
+    
+    sim_results$dieoff_dur <- as.factor(dieoff_dur)  # Store dieoff_dur as a factor
+    plot_data <- rbind(plot_data, sim_results)
+    
+    for (i in seq_along(elevations)) {
+      elev <- elevations[i]
+      elev_data <- subset(sim_results, elevation == elev)
+      
+      SOM_start <- SOM_C_init[which(elevations == elev)]
+      SOM_at_dieoff <- elev_data$SOM_C[dieoff_dur]
+      
+      # Find tipping point: first year AFTER max(SOM_C) where SOM_C drops below that max
+      max_SOM <- max(elev_data$SOM_C)
+      year_max <- elev_data$year[which.max(elev_data$SOM_C)]
+      post_max <- subset(elev_data, year > year_max)
+      drop_below_max <- post_max$year[which(post_max$SOM_C < max_SOM)[1]]
+      
+      # Find year where SOM is assumed unstocked (SOM within upper confidence interval)
+      year_SOM_equals_bare <- which(
+        elev_data$SOM_C <= bare_upper_CI[i]
+      )
+      
+      results_df <- rbind(results_df, data.frame(
+        elevation = elev,
+        dieoff_dur = dieoff_dur,
+        SOM_start = SOM_start,
+        SOM_at_dieoff = SOM_at_dieoff,
+        year_tipping_point = ifelse(!is.na(drop_below_max), drop_below_max, NA),
+        year_SOM_equals_bare = ifelse(length(year_SOM_equals_bare) > 0, min(year_SOM_equals_bare), NA)
+      ))
+    }
+  }
+  
+  plot_data$group_label <- interaction(plot_data$elevation, plot_data$dieoff_dur, sep = ", dead in ")
+  plot_data$group_label <- paste0(plot_data$group_label, "y")
+  
+  color_map <- c(
+    "low, dead in 5y" = "skyblue2", "intermediate, dead in 5y" = "royalblue2", "high, dead in 5y" = "darkblue",
+    "low, dead in 2y" = "grey70", "intermediate, dead in 2y" = "grey40", "high, dead in 2y" = "grey30",
+    "low, dead in 10y" = "tan", "intermediate, dead in 10y" = "sandybrown", "high, dead in 10y" = "saddlebrown"
+  )
+  
+  legend_order <- c(
+    "high, dead in 10y", "high, dead in 5y", "high, dead in 2y",
+    "intermediate, dead in 10y", "intermediate, dead in 5y", "intermediate, dead in 2y",
+    "low, dead in 10y", "low, dead in 5y", "low, dead in 2y"
+  )
+  
+  alpha_map <- c("2" = 0.5, "5" = 1, "10" = 0.5)
+  
+  sensitivity_plot <- ggplot(plot_data, aes(x = year, y = SOM_C, 
+                                            colour = group_label, 
+                                            group = group_label,
+                                            alpha = dieoff_dur)) +
+    geom_line(linewidth = 1.2) +
+    scale_colour_manual(values = color_map, breaks = legend_order) +
+    scale_alpha_manual(values = alpha_map) +
+    labs(x = "Year", y = "Soil Organic Carbon (t ha-1)") +
+    theme_minimal() +
+    theme(
+      legend.title = element_blank(),
+      panel.grid.major.y = element_line(colour = "grey80"),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      axis.title.x = element_text(size = 13, colour = "grey50"),
+      axis.title.y = element_text(size = 13, margin = margin(r = 12), hjust = 1, colour = "grey50"),
+      axis.text.x = element_text(size = 14, colour = "grey50"),
+      axis.text.y = element_text(size = 14, colour = "grey50")
+    ) + 
+    guides(alpha = "none")
+  
+  return(list(results_df = results_df, sensitivity_plot = sensitivity_plot))
+}
+
+sens_dieoff_dur(
+  dieoff_dur_values = c(2, 5, 10), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  erosion_pwr = 0.2, erosion_year = 5,
+  sim_years = 50
+)
+
+# Sensitivity analysis for erosion power
+sens_erosion_pwr <- function(
+    erosion_pwr_values, RE, foliage_C, 
+    woody_C, InputLab_C, InputRef_C, 
+    YL_C_init, YR_C_init, sp, Ko, Kyl, Kyr, 
+    SOM_C_init, InputLab_f, SOM_C_fin,
+    dieoff_dur, erosion_year,
+    sim_years
+) {
+  
+  results_df <- data.frame(
+    elevation = character(),
+    erosion_pwr = numeric(),
+    SOM_start = numeric(),
+    SOM_at_dieoff = numeric(),
+    year_tipping_point = numeric(),
+    year_SOM_equals_bare = numeric()
+  )
+  
+  plot_data <- data.frame()
+  elevations <- c("low", "intermediate", "high")
+  bare_upper_CI <- c(30.5037, 32.1876, 67.581)
+  
+  for (erosion_pwr in erosion_pwr_values) {
+    sim_results <- simulate_dieoff(
+      RE, foliage_C, woody_C,
+      InputLab_C, InputRef_C, YL_C_init, YR_C_init,
+      sp, Ko, Kyl, Kyr, SOM_C_init, InputLab_f,
+      dieoff_dur, erosion_pwr, erosion_year,
+      sim_years
+    )$results
+    
+    sim_results$erosion_pwr <- as.factor(erosion_pwr)  # Store erosion_pwr as a factor
+    plot_data <- rbind(plot_data, sim_results)
+    
+    for (i in seq_along(elevations)) {
+      elev <- elevations[i]
+      elev_data <- subset(sim_results, elevation == elev)
+      
+      SOM_start <- SOM_C_init[which(elevations == elev)]
+      SOM_at_dieoff <- elev_data$SOM_C[dieoff_dur]
+      
+      # Find tipping point: first year AFTER max(SOM_C) where SOM_C drops below that max
+      max_SOM <- max(elev_data$SOM_C)
+      year_max <- elev_data$year[which.max(elev_data$SOM_C)]
+      post_max <- subset(elev_data, year > year_max)
+      drop_below_max <- post_max$year[which(post_max$SOM_C < max_SOM)[1]]
+      
+      # Find year where SOM is assumed unstocked (SOM within upper confidence interval)
+      year_SOM_equals_bare <- which(
+        elev_data$SOM_C <= bare_upper_CI[i]
+      )
+      
+      results_df <- rbind(results_df, data.frame(
+        elevation = elev,
+        dieoff_dur = dieoff_dur,
+        SOM_start = SOM_start,
+        SOM_at_dieoff = SOM_at_dieoff,
+        year_tipping_point = ifelse(!is.na(drop_below_max), drop_below_max, NA),
+        year_SOM_equals_bare = ifelse(length(year_SOM_equals_bare) > 0, min(year_SOM_equals_bare), NA)
+      ))
+    }
+  }
+  
+  plot_data$group_label <- interaction(plot_data$elevation, plot_data$erosion_pwr, sep = ", erosion pwr ")
+  plot_data$group_label <- paste0(plot_data$group_label)
+  
+  color_map <- c(
+    "low, erosion pwr 0.2" = "skyblue2", "intermediate, erosion pwr 0.2" = "royalblue2", "high, erosion pwr 0.2" = "darkblue",
+    "low, erosion pwr 0.1" = "grey70", "intermediate, erosion pwr 0.1" = "grey40", "high, erosion pwr 0.1" = "grey30",
+    "low, erosion pwr 0.4" = "tan", "intermediate, erosion pwr 0.4" = "sandybrown", "high, erosion pwr 0.4" = "saddlebrown"
+  )
+  
+  legend_order <- c(
+    "high, erosion pwr 0.1", "high, erosion pwr 0.2", "high, erosion pwr 0.4",
+    "intermediate, erosion pwr 0.1", "intermediate, erosion pwr 0.2", "intermediate, erosion pwr 0.4",
+    "low, erosion pwr 0.1", "low, erosion pwr 0.2", "low, erosion pwr 0.4"
+  )
+  
+  alpha_map <- c("0.1" = 0.5, "0.2" = 1, "0.4" = 0.5)
+  
+  sensitivity_plot <- ggplot(plot_data, aes(x = year, y = SOM_C, 
+                                            colour = group_label, 
+                                            group = group_label,
+                                            alpha = erosion_pwr)) +
+    geom_line(linewidth = 1.2) +
+    scale_colour_manual(values = color_map, breaks = legend_order) +
+    scale_alpha_manual(values = alpha_map) +
+    labs(x = "Year", y = "Soil Organic Carbon (t ha-1)") +
+    theme_minimal() +
+    theme(
+      legend.title = element_blank(),
+      panel.grid.major.y = element_line(colour = "grey80"),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      axis.title.x = element_text(size = 13, colour = "grey50"),
+      axis.title.y = element_text(size = 13, margin = margin(r = 12), hjust = 1, colour = "grey50"),
+      axis.text.x = element_text(size = 14, colour = "grey50"),
+      axis.text.y = element_text(size = 14, colour = "grey50")
+    ) + 
+    guides(alpha = "none")
+  
+  return(list(results_df = results_df, sensitivity_plot = sensitivity_plot))
+}
+
+sens_erosion_pwr(
+  erosion_pwr_values = c(0.1, 0.2, 0.4), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 5, erosion_year = 5,
+  sim_years = 50
+)
+
+# DID WE DO THE SENSITIVITY ONLY WITH ONE EROSION? NOT THE MEAN OF ALL YEARS??
+# OH I THINK THESE ARE THE BASE FUNCTIONS FOR THE MEAN IN THE NEXT SECTION
+# WE DO NEED A PLACE TO INPUT ON WHICH YEAR EROSION HAPPENS...
+# CHECK IF THIS IS THE CASE, MENTION IT IF SO
+# AND IF NOT FUCKIN FIX IT
+# ALSO SEE TO DO IN PREVIOUS SECTION (it's the same tbh)
