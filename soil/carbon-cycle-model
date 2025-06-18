@@ -705,3 +705,367 @@ sens_erosion_pwr(
 # CHECK IF THIS IS THE CASE, MENTION IT IF SO
 # AND IF NOT FUCKIN FIX IT
 # ALSO SEE TO DO IN PREVIOUS SECTION (it's the same tbh)
+
+#### BAILA TU CUERPO ALEGRIA MACARENA ####
+# take function of sensitivity analysis for erosion year to calculate average SOM of all erosion scenarios
+# LOOKS LIKE I IGNORED EVERY FUNCTION ABOVE AND THIS IS THE FUNCTION
+# CALCULATING/PLOTTING ALL MY PUBLICATION RESULTS?
+# WHICH IS FINE BUT THEN ERASE EVERYTHING ABOVE
+     
+macarena <- function(
+    erosion_year_values, RE, foliage_C, 
+    woody_C, InputLab_C, InputRef_C, 
+    YL_C_init, YR_C_init, sp, Ko, Kyl, Kyr, 
+    SOM_C_init, InputLab_f, SOM_C_fin,
+    dieoff_dur, erosion_pwr,
+    alpha_ind_yrs, sim_years
+) {
+  
+  results_df <- data.frame(
+    elevation = character(),
+    erosion_year = numeric(),
+    SOM_start = numeric(),
+    SOM_at_dieoff = numeric(),
+    year_tipping_point = numeric(),
+    year_SOM_equals_bare = numeric()
+  )
+  
+  plot_data <- data.frame()
+  avg_data <- data.frame()
+  elevations <- c("low", "intermediate", "high")
+  bare_upper_CI <- c(30.5037, 32.1876, 67.581)
+  
+  for (erosion_year in erosion_year_values) {
+    sim_results <- simulate_dieoff(
+      RE, foliage_C, woody_C,
+      InputLab_C, InputRef_C, YL_C_init, YR_C_init,
+      sp, Ko, Kyl, Kyr, SOM_C_init, InputLab_f,
+      dieoff_dur, erosion_pwr, erosion_year,
+      sim_years
+    )$results
+    
+    sim_results$erosion_year <- as.factor(erosion_year)
+    plot_data <- rbind(plot_data, sim_results)
+  }
+  
+  # Create averaged data by elevation and year
+  avg_data <- plot_data %>% 
+    group_by(elevation, year) %>% 
+    summarise(SOM_C = mean(SOM_C), .groups = 'drop')
+  
+  # Now, based on avg_data, calculate results_df for each elevation
+  results_df <- data.frame(
+    elevation = character(),
+    SOM_start = numeric(),
+    SOM_at_dieoff = numeric(),
+    year_tipping_point = numeric(),
+    year_SOM_equals_bare = numeric()
+  )
+  
+  for (elev in elevations) {
+    elev_data <- subset(avg_data, elevation == elev)
+    
+    SOM_start <- SOM_C_init[which(elevations == elev)]
+    SOM_at_dieoff <- elev_data$SOM_C[dieoff_dur]
+    
+    # find tipping point: first year AFTER max(SOM_C) where SOM_C drops below that max
+    max_SOM <- max(elev_data$SOM_C)
+    year_max <- elev_data$year[which.max(elev_data$SOM_C)]
+    post_max <- subset(elev_data, year > year_max)
+    drop_below_max <- post_max$year[which(post_max$SOM_C < max_SOM)[1]]
+    
+    # Find year where SOM is assumed bare (SOM within upper confidence interval)
+    year_SOM_equals_bare <- which(
+      elev_data$SOM_C <= bare_upper_CI[which(elevations == elev)]
+    )
+    
+    results_df <- rbind(results_df, data.frame(
+      elevation = elev,
+      SOM_start = SOM_start,
+      SOM_at_dieoff = SOM_at_dieoff,
+      year_tipping_point = ifelse(!is.na(drop_below_max), drop_below_max, NA),
+      year_SOM_equals_bare = ifelse(length(year_SOM_equals_bare) > 0, min(year_SOM_equals_bare), NA)
+    ))
+  }
+  
+# Create data for colored areas/ribbons with stacked effect
+  create_ribbon_data <- function(avg_data, results_df) {
+    ribbon_data <- data.frame()
+    
+    # Get all unique years for interpolation
+    all_years <- sort(unique(avg_data$year))
+    
+    # Create interpolated data for each elevation to ensure we have values at all years
+    elevations <- c("high", "intermediate", "low")
+    interp_data <- data.frame()
+    
+    for (elev in elevations) {
+      elev_data <- avg_data[avg_data$elevation == elev, ]
+      # Interpolate to get values at all years
+      interp_values <- approx(elev_data$year, elev_data$SOM_C, xout = all_years)
+      interp_data <- rbind(interp_data, data.frame(
+        year = all_years,
+        SOM_C = interp_values$y,
+        elevation = elev
+      ))
+    }
+    
+    for (elev in elevations) {
+      elev_data <- interp_data[interp_data$elevation == elev, ]
+      elev_results <- results_df[results_df$elevation == elev, ]
+      
+      tipping_year <- elev_results$year_tipping_point - 1 # removing one year for graphic purposes; ribbon starts at peak
+      treeless_year <- elev_results$year_SOM_equals_bare
+      
+      # Determine ymin based on elevation hierarchy
+      if (elev == "high") {
+        # High elevation ribbons go from intermediate elevation line to high elevation line
+        middle_data <- interp_data[interp_data$elevation == "intermediate", ]
+        ymin_values <- middle_data$SOM_C
+      } else if (elev == "intermediate") {
+        # intermediate elevation ribbons go from low elevation line to intermediate elevation line
+        low_data <- interp_data[interp_data$elevation == "low", ]
+        ymin_values <- low_data$SOM_C
+      } else {
+        # Low elevation ribbons go from 0 to low elevation line
+        ymin_values <- rep(0, length(all_years))
+      }
+      
+      # Phase 1: From tipping point to treeless state (between_points)
+      phase1_indices <- elev_data$year >= tipping_year & elev_data$year <= treeless_year
+      if (sum(phase1_indices) > 0) {
+        ribbon_data <- rbind(ribbon_data, data.frame(
+          year = elev_data$year[phase1_indices],
+          SOM_C = elev_data$SOM_C[phase1_indices],
+          elevation = elev,
+          phase = "between_points",
+          ymin = ymin_values[phase1_indices],
+          ymax = elev_data$SOM_C[phase1_indices]
+        ))
+      }
+      
+      # Phase 2: After treeless state (including treeless year)
+      phase2_indices <- elev_data$year >= treeless_year
+      if (sum(phase2_indices) > 0) {
+        ribbon_data <- rbind(ribbon_data, data.frame(
+          year = elev_data$year[phase2_indices],
+          SOM_C = elev_data$SOM_C[phase2_indices],
+          elevation = elev,
+          phase = "after_treeless",
+          ymin = ymin_values[phase2_indices],
+          ymax = elev_data$SOM_C[phase2_indices]
+        ))
+      }
+    }
+    
+    return(ribbon_data)
+  }
+  
+  # Create the ribbon data
+  ribbon_data <- create_ribbon_data(avg_data, results_df)
+  
+  # Modified plot
+  sensitivity_plot <- ggplot() +
+    # Add colored ribbons/areas - plot all between_points first, then all after_treeless
+    # This ensures proper layering without overlap
+    geom_ribbon(data = ribbon_data[ribbon_data$phase == "between_points" & ribbon_data$elevation == "low", ], 
+                aes(x = year, ymin = ymin, ymax = ymax), 
+                fill = "lightgrey", alpha = 0.5) +
+    geom_ribbon(data = ribbon_data[ribbon_data$phase == "between_points" & ribbon_data$elevation == "intermediate", ], 
+                aes(x = year, ymin = ymin, ymax = ymax), 
+                fill = "lightgrey", alpha = 0.5) +
+    geom_ribbon(data = ribbon_data[ribbon_data$phase == "between_points" & ribbon_data$elevation == "high", ], 
+                aes(x = year, ymin = ymin, ymax = ymax), 
+                fill = "lightgrey", alpha = 0.5) +
+    geom_ribbon(data = ribbon_data[ribbon_data$phase == "after_treeless" & ribbon_data$elevation == "low", ], 
+                aes(x = year, ymin = ymin, ymax = ymax), 
+                fill = "grey60", alpha = 0.5) +
+    geom_ribbon(data = ribbon_data[ribbon_data$phase == "after_treeless" & ribbon_data$elevation == "intermediate", ], 
+                aes(x = year, ymin = ymin, ymax = ymax), 
+                fill = "grey60", alpha = 0.5) +
+    geom_ribbon(data = ribbon_data[ribbon_data$phase == "after_treeless" & ribbon_data$elevation == "high", ], 
+                aes(x = year, ymin = ymin, ymax = ymax), 
+                fill = "grey60", alpha = 0.5) +
+    # Individual year lines (background)
+    geom_line(data = plot_data, aes(x = year, y = SOM_C, 
+                                    group = interaction(elevation, erosion_year)),
+              color = "grey60", alpha = alpha_ind_yrs, linewidth = 1) +
+    # Average lines (foreground)
+    geom_line(data = avg_data, aes(x = year, y = SOM_C, 
+                                   color = elevation, group = elevation),
+              linewidth = 3) +
+    labs(x = "Year", y = expression(bold(SOC~(std.~dev.~t~ha^{-1}))), colour = "Elevation") +
+    scale_colour_manual(values = c("low" = "skyblue2", "intermediate" = "royalblue2", "high" = "darkblue"), 
+                        limits = c("high", "intermediate", "low")) +
+    scale_x_continuous(
+      limits = c(0, sim_years),
+      breaks = unique(c(seq(0, sim_years, by = 50), sim_years))
+    ) +
+    geom_point(
+      data = data.frame(phase = factor(
+        c("after_treeless", "between_points"),
+        levels = c("between_points", "after_treeless"))
+      ),
+      aes(x = Inf, y = Inf, fill = phase),
+      shape = 21, size = 0  # invisible point
+    ) +
+    scale_fill_manual(
+      name = "Carbon cycle phase",
+      values = c("after_treeless" = "grey60", "between_points" = "lightgrey"),
+      labels = c("after_treeless" = "carbon source,\n unstocked condition", "between_points" = "carbon source")
+    ) +
+    guides(
+      colour = guide_legend(order = 1),   # elevation legend
+      fill = guide_legend(override.aes = list(shape = 22, size = 5, colour = NA), order = 2)  # carbon cycle legend
+    ) +
+    theme_minimal() +
+    theme(
+      legend.title = element_text(size = 18, colour = "grey50"),
+      panel.grid.major.y = element_line(colour = "grey80"),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      legend.text = element_text(size = 18, colour = "grey50"),
+      axis.title.x = element_text(size = 18, colour = "grey50", vjust = 5),
+      axis.title.y = element_text(size = 22, margin = margin(r = 15), hjust = 1, colour = "grey50"),
+      axis.text.x = element_text(size = 20, colour = "grey50", vjust = 5),
+      axis.text.y = element_text(size = 20, colour = "grey50")
+    )
+  
+  # avg_data in individual dataframes by elevation
+  low_avg_SOM <- subset(avg_data, elevation == "low")
+  middle_avg_SOM <- subset(avg_data, elevation == "intermediate")
+  high_avg_SOM <- subset(avg_data, elevation == "high")
+  
+  return(list(
+    results_df = results_df,
+    sensitivity_plot = sensitivity_plot,
+    low_avg_SOM = low_avg_SOM,
+    middle_avg_SOM = middle_avg_SOM,
+    high_avg_SOM = high_avg_SOM
+  ))
+
+}
+
+noerosion_plot <- macarena(
+  erosion_year_values = c(5, 5, 5, 5, 5, 5, 5, 5, 5, 5), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 5, erosion_pwr = 0,
+  alpha_ind_yrs = 0, sim_years = 175
+)$sensitivity_plot
+
+macarena(
+  erosion_year_values = c(5, 5, 5, 5, 5, 5, 5, 5, 5, 5), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 5, erosion_pwr = 0,
+  alpha_ind_yrs = 0.25, sim_years = 175
+)$results_df
+
+erosion_plot <- macarena(
+  erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 5, erosion_pwr = 0.2,
+  alpha_ind_yrs = 0, sim_years = 175
+)$sensitivity_plot
+
+macarena(
+  erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 5, erosion_pwr = 0.2,
+  alpha_ind_yrs = 0.25, sim_years = 175
+)$results_df
+
+# Sensitivity analyses on 10-year average erosion:
+
+# 2-year dieoff, all else fixed
+
+dieoff_2y <- macarena(
+  erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 2, erosion_pwr = 0.2,
+  alpha_ind_yrs = 0.1, sim_years = 150
+)
+dieoff_2y$results_df
+
+# 5-year dieoff, all else fixed
+
+dieoff_5y <- macarena(
+  erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 5, erosion_pwr = 0.2,
+  alpha_ind_yrs = 0.1, sim_years = 150
+)
+dieoff_5y$results_df
+
+# 10-year dieoff, all else fixed
+
+dieoff_10y <- macarena(
+  erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 10, erosion_pwr = 0.2,
+  alpha_ind_yrs = 0.1, sim_years = 150
+)
+dieoff_10y$results_df
+
+# 0 erosion power, all else fixed
+
+erosionpwr_00 <- macarena(
+  erosion_year_values = c(5, 5, 5, 5, 5, 5, 5, 5, 5, 5), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 5, erosion_pwr = 0,
+  alpha_ind_yrs = 0.1, sim_years = 175
+)
+
+erosionpwr_00$results_df
+
+# 10 % erosion power, all else fixed
+
+erosionpwr_01 <- macarena(
+  erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 5, erosion_pwr = 0.1,
+  alpha_ind_yrs = 0.1, sim_years = 150
+)
+
+erosionpwr_01$results_df
+
+# 40 % erosion power, all else fixed
+
+erosionpwr_04 <- macarena(
+  erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
+  RE, foliage_C, woody_C, 
+  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
+  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
+  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
+  dieoff_dur = 5, erosion_pwr = 0.4,
+  alpha_ind_yrs = 0.1, sim_years = 150
+)
+
+erosionpwr_04$results_df
