@@ -464,247 +464,10 @@ dieoff_results <- simulate_dieoff(
 #dieoff_results$plot
 
 # TO DO: IMPLEMENT MEAN EROSION RESULTS FOR PUBLICATION OR AT LEAST MENTION THAT THEY COME LATER
-
-#### SENSITIVITY ANALYSES ####
-
-# Sensitivity analysis for die-off duration
-sens_dieoff_dur <- function(
-    dieoff_dur_values, RE, foliage_C, 
-    woody_C, InputLab_C, InputRef_C, 
-    YL_C_init, YR_C_init, sp, Ko, Kyl, Kyr, 
-    SOM_C_init, InputLab_f, SOM_C_fin,
-    erosion_pwr, erosion_year,
-    sim_years
-) {
-  
-  results_df <- data.frame(
-    elevation = character(),
-    dieoff_dur = numeric(),
-    SOM_start = numeric(),
-    SOM_at_dieoff = numeric(),
-    year_tipping_point = numeric(),
-    year_SOM_equals_bare = numeric()
-  )
-  
-  plot_data <- data.frame()
-  elevations <- c("low", "intermediate", "high")
-  bare_upper_CI <- c(30.5037, 32.1876, 67.581)
-  
-  for (dieoff_dur in dieoff_dur_values) {
-    sim_results <- simulate_dieoff(
-      RE, foliage_C, woody_C,
-      InputLab_C, InputRef_C, YL_C_init, YR_C_init,
-      sp, Ko, Kyl, Kyr, SOM_C_init, InputLab_f,
-      dieoff_dur, erosion_pwr, erosion_year,
-      sim_years
-    )$results
-    
-    sim_results$dieoff_dur <- as.factor(dieoff_dur)  # Store dieoff_dur as a factor
-    plot_data <- rbind(plot_data, sim_results)
-    
-    for (i in seq_along(elevations)) {
-      elev <- elevations[i]
-      elev_data <- subset(sim_results, elevation == elev)
-      
-      SOM_start <- SOM_C_init[which(elevations == elev)]
-      SOM_at_dieoff <- elev_data$SOM_C[dieoff_dur]
-      
-      # Find tipping point: first year AFTER max(SOM_C) where SOM_C drops below that max
-      max_SOM <- max(elev_data$SOM_C)
-      year_max <- elev_data$year[which.max(elev_data$SOM_C)]
-      post_max <- subset(elev_data, year > year_max)
-      drop_below_max <- post_max$year[which(post_max$SOM_C < max_SOM)[1]]
-      
-      # Find year where SOM is assumed unstocked (SOM within upper confidence interval)
-      year_SOM_equals_bare <- which(
-        elev_data$SOM_C <= bare_upper_CI[i]
-      )
-      
-      results_df <- rbind(results_df, data.frame(
-        elevation = elev,
-        dieoff_dur = dieoff_dur,
-        SOM_start = SOM_start,
-        SOM_at_dieoff = SOM_at_dieoff,
-        year_tipping_point = ifelse(!is.na(drop_below_max), drop_below_max, NA),
-        year_SOM_equals_bare = ifelse(length(year_SOM_equals_bare) > 0, min(year_SOM_equals_bare), NA)
-      ))
-    }
-  }
-  
-  plot_data$group_label <- interaction(plot_data$elevation, plot_data$dieoff_dur, sep = ", dead in ")
-  plot_data$group_label <- paste0(plot_data$group_label, "y")
-  
-  color_map <- c(
-    "low, dead in 5y" = "skyblue2", "intermediate, dead in 5y" = "royalblue2", "high, dead in 5y" = "darkblue",
-    "low, dead in 2y" = "grey70", "intermediate, dead in 2y" = "grey40", "high, dead in 2y" = "grey30",
-    "low, dead in 10y" = "tan", "intermediate, dead in 10y" = "sandybrown", "high, dead in 10y" = "saddlebrown"
-  )
-  
-  legend_order <- c(
-    "high, dead in 10y", "high, dead in 5y", "high, dead in 2y",
-    "intermediate, dead in 10y", "intermediate, dead in 5y", "intermediate, dead in 2y",
-    "low, dead in 10y", "low, dead in 5y", "low, dead in 2y"
-  )
-  
-  alpha_map <- c("2" = 0.5, "5" = 1, "10" = 0.5)
-  
-  sensitivity_plot <- ggplot(plot_data, aes(x = year, y = SOM_C, 
-                                            colour = group_label, 
-                                            group = group_label,
-                                            alpha = dieoff_dur)) +
-    geom_line(linewidth = 1.2) +
-    scale_colour_manual(values = color_map, breaks = legend_order) +
-    scale_alpha_manual(values = alpha_map) +
-    labs(x = "Year", y = "Soil Organic Carbon (t ha-1)") +
-    theme_minimal() +
-    theme(
-      legend.title = element_blank(),
-      panel.grid.major.y = element_line(colour = "grey80"),
-      panel.grid.minor.y = element_blank(),
-      panel.grid.major.x = element_blank(),
-      panel.grid.minor.x = element_blank(),
-      axis.title.x = element_text(size = 13, colour = "grey50"),
-      axis.title.y = element_text(size = 13, margin = margin(r = 12), hjust = 1, colour = "grey50"),
-      axis.text.x = element_text(size = 14, colour = "grey50"),
-      axis.text.y = element_text(size = 14, colour = "grey50")
-    ) + 
-    guides(alpha = "none")
-  
-  return(list(results_df = results_df, sensitivity_plot = sensitivity_plot))
-}
-
-sens_dieoff_dur(
-  dieoff_dur_values = c(2, 5, 10), 
-  RE, foliage_C, woody_C, 
-  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
-  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
-  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
-  erosion_pwr = 0.2, erosion_year = 5,
-  sim_years = 50
-)
-
-# Sensitivity analysis for erosion power
-sens_erosion_pwr <- function(
-    erosion_pwr_values, RE, foliage_C, 
-    woody_C, InputLab_C, InputRef_C, 
-    YL_C_init, YR_C_init, sp, Ko, Kyl, Kyr, 
-    SOM_C_init, InputLab_f, SOM_C_fin,
-    dieoff_dur, erosion_year,
-    sim_years
-) {
-  
-  results_df <- data.frame(
-    elevation = character(),
-    erosion_pwr = numeric(),
-    SOM_start = numeric(),
-    SOM_at_dieoff = numeric(),
-    year_tipping_point = numeric(),
-    year_SOM_equals_bare = numeric()
-  )
-  
-  plot_data <- data.frame()
-  elevations <- c("low", "intermediate", "high")
-  bare_upper_CI <- c(30.5037, 32.1876, 67.581)
-  
-  for (erosion_pwr in erosion_pwr_values) {
-    sim_results <- simulate_dieoff(
-      RE, foliage_C, woody_C,
-      InputLab_C, InputRef_C, YL_C_init, YR_C_init,
-      sp, Ko, Kyl, Kyr, SOM_C_init, InputLab_f,
-      dieoff_dur, erosion_pwr, erosion_year,
-      sim_years
-    )$results
-    
-    sim_results$erosion_pwr <- as.factor(erosion_pwr)  # Store erosion_pwr as a factor
-    plot_data <- rbind(plot_data, sim_results)
-    
-    for (i in seq_along(elevations)) {
-      elev <- elevations[i]
-      elev_data <- subset(sim_results, elevation == elev)
-      
-      SOM_start <- SOM_C_init[which(elevations == elev)]
-      SOM_at_dieoff <- elev_data$SOM_C[dieoff_dur]
-      
-      # Find tipping point: first year AFTER max(SOM_C) where SOM_C drops below that max
-      max_SOM <- max(elev_data$SOM_C)
-      year_max <- elev_data$year[which.max(elev_data$SOM_C)]
-      post_max <- subset(elev_data, year > year_max)
-      drop_below_max <- post_max$year[which(post_max$SOM_C < max_SOM)[1]]
-      
-      # Find year where SOM is assumed unstocked (SOM within upper confidence interval)
-      year_SOM_equals_bare <- which(
-        elev_data$SOM_C <= bare_upper_CI[i]
-      )
-      
-      results_df <- rbind(results_df, data.frame(
-        elevation = elev,
-        dieoff_dur = dieoff_dur,
-        SOM_start = SOM_start,
-        SOM_at_dieoff = SOM_at_dieoff,
-        year_tipping_point = ifelse(!is.na(drop_below_max), drop_below_max, NA),
-        year_SOM_equals_bare = ifelse(length(year_SOM_equals_bare) > 0, min(year_SOM_equals_bare), NA)
-      ))
-    }
-  }
-  
-  plot_data$group_label <- interaction(plot_data$elevation, plot_data$erosion_pwr, sep = ", erosion pwr ")
-  plot_data$group_label <- paste0(plot_data$group_label)
-  
-  color_map <- c(
-    "low, erosion pwr 0.2" = "skyblue2", "intermediate, erosion pwr 0.2" = "royalblue2", "high, erosion pwr 0.2" = "darkblue",
-    "low, erosion pwr 0.1" = "grey70", "intermediate, erosion pwr 0.1" = "grey40", "high, erosion pwr 0.1" = "grey30",
-    "low, erosion pwr 0.4" = "tan", "intermediate, erosion pwr 0.4" = "sandybrown", "high, erosion pwr 0.4" = "saddlebrown"
-  )
-  
-  legend_order <- c(
-    "high, erosion pwr 0.1", "high, erosion pwr 0.2", "high, erosion pwr 0.4",
-    "intermediate, erosion pwr 0.1", "intermediate, erosion pwr 0.2", "intermediate, erosion pwr 0.4",
-    "low, erosion pwr 0.1", "low, erosion pwr 0.2", "low, erosion pwr 0.4"
-  )
-  
-  alpha_map <- c("0.1" = 0.5, "0.2" = 1, "0.4" = 0.5)
-  
-  sensitivity_plot <- ggplot(plot_data, aes(x = year, y = SOM_C, 
-                                            colour = group_label, 
-                                            group = group_label,
-                                            alpha = erosion_pwr)) +
-    geom_line(linewidth = 1.2) +
-    scale_colour_manual(values = color_map, breaks = legend_order) +
-    scale_alpha_manual(values = alpha_map) +
-    labs(x = "Year", y = "Soil Organic Carbon (t ha-1)") +
-    theme_minimal() +
-    theme(
-      legend.title = element_blank(),
-      panel.grid.major.y = element_line(colour = "grey80"),
-      panel.grid.minor.y = element_blank(),
-      panel.grid.major.x = element_blank(),
-      panel.grid.minor.x = element_blank(),
-      axis.title.x = element_text(size = 13, colour = "grey50"),
-      axis.title.y = element_text(size = 13, margin = margin(r = 12), hjust = 1, colour = "grey50"),
-      axis.text.x = element_text(size = 14, colour = "grey50"),
-      axis.text.y = element_text(size = 14, colour = "grey50")
-    ) + 
-    guides(alpha = "none")
-  
-  return(list(results_df = results_df, sensitivity_plot = sensitivity_plot))
-}
-
-sens_erosion_pwr(
-  erosion_pwr_values = c(0.1, 0.2, 0.4), 
-  RE, foliage_C, woody_C, 
-  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
-  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
-  SOM_C_init = healthy_SOM, InputLab_f = iLab_bare, SOM_C_fin = bare_SOM,
-  dieoff_dur = 5, erosion_year = 5,
-  sim_years = 50
-)
-
-# DID WE DO THE SENSITIVITY ONLY WITH ONE EROSION? NOT THE MEAN OF ALL YEARS??
-# OH I THINK THESE ARE THE BASE FUNCTIONS FOR THE MEAN IN THE NEXT SECTION
-# WE DO NEED A PLACE TO INPUT ON WHICH YEAR EROSION HAPPENS...
-# CHECK IF THIS IS THE CASE, MENTION IT IF SO
-# AND IF NOT FUCKIN FIX IT
-# ALSO SEE TO DO IN PREVIOUS SECTION (it's the same tbh)
+# I REMOVED THE SENSITIVITY ANALYSIS SECTION WITH THEIR FUNCTIONS
+# BECAUSE THEY ARE COMPLETELY REPLACED BY MACARENA
+# WHICH IS ALSO THE MEAN EROSION VERSION OF THE FUNCTION ABOVE
+# SO MENTION THAT
 
 #### BAILA TU CUERPO ALEGRIA MACARENA ####
 # take function of sensitivity analysis for erosion year to calculate average SOM of all erosion scenarios
@@ -1069,3 +832,137 @@ erosionpwr_04 <- macarena(
 )
 
 erosionpwr_04$results_df
+
+#### CODE FOR SUPPLEMENTARY PLOT ####
+
+low_2y <- dieoff_2y$low_avg_SOM %>% mutate(elevation = "low", dieoff_dur = "2y")
+middle_2y <- dieoff_2y$middle_avg_SOM %>% mutate(elevation = "intermediate", dieoff_dur = "2y")
+high_2y <- dieoff_2y$high_avg_SOM %>% mutate(elevation = "high", dieoff_dur = "2y")
+
+low_5y <- dieoff_5y$low_avg_SOM %>% mutate(elevation = "low", dieoff_dur = "5y")
+middle_5y <- dieoff_5y$middle_avg_SOM %>% mutate(elevation = "intermediate", dieoff_dur = "5y")
+high_5y <- dieoff_5y$high_avg_SOM %>% mutate(elevation = "high", dieoff_dur = "5y")
+
+low_10y <- dieoff_10y$low_avg_SOM %>% mutate(elevation = "low", dieoff_dur = "10y")
+middle_10y <- dieoff_10y$middle_avg_SOM %>% mutate(elevation = "intermediate", dieoff_dur = "10y")
+high_10y <- dieoff_10y$high_avg_SOM %>% mutate(elevation = "high", dieoff_dur = "10y")
+
+supp_dieoff <- bind_rows(
+  low_2y, middle_2y, high_2y,
+  low_5y, middle_5y, high_5y,
+  low_10y, middle_10y, high_10y
+)
+
+supp_dieoff$group_label <- interaction(supp_dieoff$elevation, supp_dieoff$dieoff_dur, sep = ", dead in ")
+
+color_map <- c(
+  "low, dead in 5y" = "skyblue2", "intermediate, dead in 5y" = "royalblue2", "high, dead in 5y" = "darkblue",
+  "low, dead in 2y" = "grey70", "intermediate, dead in 2y" = "grey40", "high, dead in 2y" = "grey30",
+  "low, dead in 10y" = "tan", "intermediate, dead in 10y" = "sandybrown", "high, dead in 10y" = "saddlebrown"
+)
+
+legend_order <- c(
+  "high, dead in 10y", "high, dead in 5y", "high, dead in 2y",
+  "intermediate, dead in 10y", "intermediate, dead in 5y", "intermediate, dead in 2y",
+  "low, dead in 10y", "low, dead in 5y", "low, dead in 2y"
+)
+
+alpha_map <- c(
+  "low, dead in 5y" = 1, "intermediate, dead in 5y" = 1, "high, dead in 5y" = 1,
+  "low, dead in 2y" = 0.5, "intermediate, dead in 2y" = 0.5, "high, dead in 2y" = 0.5,
+  "low, dead in 10y" = 0.5, "intermediate, dead in 10y" = 0.5, "high, dead in 10y" = 0.5)
+
+supp_dieoff_plot <- ggplot(supp_dieoff, aes(
+  x = year, y = SOM_C,
+  colour = group_label, 
+  group = group_label,
+  alpha = group_label
+  )
+) +
+  geom_line(linewidth = 1.2) +
+  scale_colour_manual(values = color_map, breaks = legend_order) +
+  scale_alpha_manual(values = alpha_map) +
+  labs(x = "Year", y = "Soil Organic Carbon (t ha-1)") +
+  theme_minimal() +
+  theme(
+    legend.title = element_blank(),
+    panel.grid.major.y = element_line(colour = "grey80"),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.title.x = element_text(size = 13, colour = "grey50"),
+    axis.title.y = element_text(size = 13, margin = margin(r = 12), hjust = 1, colour = "grey50"),
+    axis.text.x = element_text(size = 14, colour = "grey50"),
+    axis.text.y = element_text(size = 14, colour = "grey50")
+  ) + 
+  guides(alpha = "none")
+
+low_01 <- erosionpwr_01$low_avg_SOM %>% mutate(elevation = "low", erosion_pwr = "10%")
+middle_01 <- erosionpwr_01$middle_avg_SOM %>% mutate(elevation = "intermediate", erosion_pwr = "10%")
+high_01 <- erosionpwr_01$high_avg_SOM %>% mutate(elevation = "high", erosion_pwr = "10%")
+
+low_02 <- dieoff_5y$low_avg_SOM %>% mutate(elevation = "low", erosion_pwr = "20%")
+middle_02 <- dieoff_5y$middle_avg_SOM %>% mutate(elevation = "intermediate", erosion_pwr = "20%")
+high_02 <- dieoff_5y$high_avg_SOM %>% mutate(elevation = "high", erosion_pwr = "20%")
+
+low_04 <- erosionpwr_04$low_avg_SOM %>% mutate(elevation = "low", erosion_pwr = "40%")
+middle_04 <- erosionpwr_04$middle_avg_SOM %>% mutate(elevation = "intermediate", erosion_pwr = "40%")
+high_04 <- erosionpwr_04$high_avg_SOM %>% mutate(elevation = "high", erosion_pwr = "40%")
+
+supp_erosion <- bind_rows(
+  low_01, middle_01, high_01,
+  low_02, middle_02, high_02,
+  low_04, middle_04, high_04
+)
+
+supp_erosion$group_label <- interaction(supp_erosion$elevation, supp_erosion$erosion_pwr, sep = ", erosion ")
+
+color_map <- c(
+  "low, erosion 20%" = "skyblue2", "intermediate, erosion 20%" = "royalblue2", "high, erosion 20%" = "darkblue",
+  "low, erosion 10%" = "grey70", "intermediate, erosion 10%" = "grey40", "high, erosion 10%" = "grey30",
+  "low, erosion 40%" = "tan", "intermediate, erosion 40%" = "sandybrown", "high, erosion 40%" = "saddlebrown"
+)
+
+legend_order <- c(
+  "high, erosion 40%", "high, erosion 20%", "high, erosion 10%",
+  "intermediate, erosion 40%", "intermediate, erosion 20%", "intermediate, erosion 10%",
+  "low, erosion 40%", "low, erosion 20%", "low, erosion 10%"
+)
+
+alpha_map <- c(
+  "low, erosion 20%" = 1, "intermediate, erosion 20%" = 1, "high, erosion 20%" = 1,
+  "low, erosion 10%" = 0.5, "intermediate, erosion 10%" = 0.5, "high, erosion 10%" = 0.5,
+  "low, erosion 40%" = 0.5, "intermediate, erosion 40%" = 0.5, "high, erosion 40%" = 0.5)
+
+supp_erosion_plot <- ggplot(supp_erosion, aes(
+  x = year, y = SOM_C,
+  colour = group_label, 
+  group = group_label,
+  alpha = group_label
+)
+) +
+  geom_line(linewidth = 1.2) +
+  scale_colour_manual(values = color_map, breaks = legend_order) +
+  scale_alpha_manual(values = alpha_map) +
+  labs(x = "Year", y = "Soil Organic Carbon (t ha-1)") +
+  theme_minimal() +
+  theme(
+    legend.title = element_blank(),
+    panel.grid.major.y = element_line(colour = "grey80"),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.title.x = element_text(size = 13, colour = "grey50"),
+    axis.title.y = element_text(size = 13, margin = margin(r = 12), hjust = 1, colour = "grey50"),
+    axis.text.x = element_text(size = 14, colour = "grey50"),
+    axis.text.y = element_text(size = 14, colour = "grey50")
+  ) + 
+  guides(alpha = "none")
+
+ggarrange(
+  supp_dieoff_plot + theme(plot.margin = margin(10, 30, 10, 30)),
+  supp_erosion_plot + theme(plot.margin = margin(10, 30, 10, 30)),
+  ncol = 2
+)
+grid.text("A", x = unit(0.006, "npc"), y = unit(0.98, "npc"), gp = gpar(fontsize = 20, fontface = "bold"))
+grid.text("B", x = unit(0.505, "npc"), y = unit(0.98, "npc"), gp = gpar(fontsize = 20, fontface = "bold"))
