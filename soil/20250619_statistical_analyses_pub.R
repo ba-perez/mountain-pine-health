@@ -1,0 +1,293 @@
+# ==============================================================================
+# STATISTICAL ANALYSIS OF CARBON STOCK BASED ON FIELD AND LABORATORY DATA
+# ==============================================================================
+# 
+# AUTHOR: Barbara M. P. B. de Araujo
+#
+# LAST UPDATED: 2025.06.19
+#
+# 
+# DESCRIPTION: 
+# This script analyses soil organic carbon (SOC) variables
+# across environmental factors and mountain pine health conditions
+#
+# RESEARCH QUESTIONS EXPLORED IN THIS SCRIPT:
+#   Q1: How does declining mountain pine health influence
+#         SOC stocks and spatial variability?
+#   Q2: To what extent do changes in soil volume and soil carbon concentration
+#         drive changes in SOC stocks?
+# 
+# Data: Laboratory soil analyses with forest health classifications
+# Methods: Linear mixed-effects models with variance partitioning
+# ==============================================================================
+
+#### FIRST THINGS FIRST ####
+
+# Clear workspace and optimise memory
+rm(list = ls())
+gc()
+
+# Set global options
+options(scipen = 999) # disable scientific notation
+
+# Set working directory (modify path as needed)
+setwd(r"(\\path\to\work\directory)")
+
+# Load required packages
+library(readxl)      # Import data from Excel
+library(tidyverse)   # Data manipulation and visualisation
+library(tidyr)       # Reshape data
+library(broom)       # Tidy model output
+library(dplyr)       # Data manipulation
+library(lme4)        # Linear mixed-effects models
+library(sjPlot)      # Statistical output tables
+library(vegan)       # Variance partitioning
+library(AICcmodavg)  # AICc
+library(MuMIn)       # R-squared
+# Model diagnostics:
+library(performance)
+library(DHARMa)
+
+# ==============================================================================
+#### CUSTOM FUNCTIONS ####
+# ==============================================================================
+
+# Function check_model:
+# Performs complete diagnostics of statistical models
+# Prints diagnostic information and displays plots
+
+# check statistical models
+check_model <- function(model) {
+  # Model summary
+  cat("### Model Summary ###\n")
+  print(summary(model))
+  
+  # AICc
+  cat("\n### Small-sample corrected Akaike Information Criterion ###\n")
+  print(AICc(model))
+  
+  # R-squared
+  cat("\n### R-squared (Conditional and Marginal) ###\n")
+  print(r.squaredGLMM(model))
+  
+  # Model diagnostics
+  cat("\n### Plotting model diagnostics... ###\n")
+  
+  # Residual diagnostics
+  par(mfrow = c(2, 2))
+  residuals_sim <- simulateResiduals(model, plot = TRUE)
+  par(mfrow = c(1, 1))
+
+  testResiduals(residuals_sim, plot = TRUE)
+  
+  # Additional model performance diagnostics
+  performance::check_model(model)
+}
+
+# Function Mypairs:
+# Creates publication-ready correlation matrix plots as per:
+
+# Zuur, A. F., E. N. Ieno, and C. S. Elphick (2010).
+# A protocol for data exploration to avoid common statistical problems. 
+# Methods in Ecology and Evolution 1. pp. 3–14. doi: 10.1111/j.2041-210X.2009.00001.x
+
+# Note: Requires HighstatLibV13.r for base functionality
+# Here the original code was tweaked for aesthetic purposes only
+# Returns ggplot object w/ correlation matrix
+
+# Set path to HighstatLibV13.r script
+source(r"(path\to\HighstatLibV13.r)")
+
+Mypairs <- function(Z) {
+  MyVarx <- colnames(Z)
+  
+  # Custom correlation panel with dynamic text sizing
+  panel_cor_custom <- function(data, mapping, ...){
+    x <- eval_data_col(data, mapping$x)
+    y <- eval_data_col(data, mapping$y)
+    cor_value <- cor(x, y, use = "pairwise.complete.obs")
+    
+    # Dynamic font size based on correlation strength
+    size_min <- 2   # Minimum font size (weakest correlation)
+    size_max <- 12  # Maximum font size (strongest correlation)
+    size_dynamic <- size_min + (size_max - size_min) * abs(cor_value)
+    
+    ggally_text(
+      label = formatC(cor_value, digits = 3, format = "f"),  # Format correlation
+      mapping = aes(),
+      size = size_dynamic,
+      color = "black"
+    )
+  }
+  
+  # Plot correlation matrix
+  p <- ggpairs(Z, columnLabels = MyVarx, 
+               lower = list(continuous = panel_cor_custom),  # Use custom correlation panel
+               upper = list(continuous = wrap("points", shape = 16, size = 1, color = "grey50")),  # Scatterplot
+               diag = list(continuous = wrap("densityDiag", color = "white", fill = "white"))  # Invisible diagonal
+  ) +
+    theme(
+      panel.background = element_blank(),  # Remove background
+      panel.grid.major = element_blank(),  # Remove grid lines
+      panel.border = element_rect(color = "grey70", fill = NA, linewidth = 0.5)  # Add grey70 border
+    ) +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) +  # Reduce ticks to 3
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 3))    # Reduce ticks to 3
+  
+  return(p)
+}
+  
+# ==============================================================================
+#### IMPORT AND PREPARE DATA ####
+# ==============================================================================
+
+# EXPLAIN HERE THAT ALL FIELD, LAB DATA ON CARBON STOCK HAS BEEN
+# CALCULATED AND STUFF
+
+soil_analyses_table <- read_excel(
+  r"(path\to\dataframe.xlsx)"
+) %>%
+  # Log-transform carbon variables (log1p handles zeros)
+  mutate(
+    Cstock_log = log1p(Cstock_tperha),
+    sd_Cstock_log = log1p(sd_Cstock),
+    cv_Cstock_log = log1p(cv_Cstock),
+    
+    # Standardise continuous predictors (mean = 0, sd = 1)
+    northerness_sc = scale(northerness, center = TRUE, scale = TRUE)[, 1],
+    elevation_sc = scale(elevation_m, center = TRUE, scale = TRUE)[, 1],
+    soil_vol_sc = scale(soil_vol_cm3, center = TRUE, scale = TRUE)[, 1],
+    Corg_sc = scale(Corg_percent, center = TRUE, scale = TRUE)[, 1],
+    
+    # Factor coding
+    northerness_cat = as.factor(northerness_cat),
+    elevation_cat = as.factor(elevation_cat),
+    condition = as.factor(condition),
+    triplet = as.factor(triplet)
+  ) %>%
+  # Set plot_id as rownames
+  column_to_rownames(var = "plot_id")
+
+# --- PREPARE DATA FOR VARIANCE PARTITIONING ---
+
+# Create datasets for healthy vs. non-healthy (ailing, unstocked)
+varpart_healthy <- soil_analyses_table %>%
+  tibble::rownames_to_column("plot_id") %>%
+  filter(condition == "healthy")
+
+varpart_nonhealthy <- soil_analyses_table %>%
+  tibble::rownames_to_column("plot_id") %>%
+  filter(condition %in% c("ailing", "unstocked"))
+
+# Calculate differences between non-healthy and healthy plots within triplets
+varpart_df <- varpart_nonhealthy %>%
+  left_join(varpart_healthy, by = "triplet", suffix = c("_nonhealthy", "_healthy")) %>%
+  mutate(
+    # Calculate differences in key variables for variance partitioning
+    dif_Cstock_tperha = Cstock_tperha_nonhealthy - Cstock_tperha_healthy,
+    dif_soil_vol_cm3 = soil_vol_cm3_nonhealthy - soil_vol_cm3_healthy,
+    dif_Corg_percent = Corg_percent_nonhealthy - Corg_percent_healthy
+  ) %>%
+  # Select only relevant variables for variance partitioning
+  dplyr::select(plot_id = plot_id_nonhealthy, condition = condition_nonhealthy, triplet,
+                elevation_m = elevation_m_nonhealthy, northerness = northerness_nonhealthy,
+                dif_Cstock_tperha, dif_soil_vol_cm3, dif_Corg_percent) %>%
+  column_to_rownames(var = "plot_id") %>%
+  mutate(
+    # Standardise relevant variables (mean = 0, sd = 1)
+    northerness_sc = scale(northerness, center = TRUE, scale = TRUE)[, 1],
+    elevation_sc = scale(elevation_m, center = TRUE, scale = TRUE)[, 1],
+    dif_Cstock_sc = scale(dif_Cstock_tperha, center = TRUE, scale = TRUE)[, 1],
+    dif_soil_vol_sc = scale(dif_soil_vol_cm3, center = TRUE, scale = TRUE)[, 1],
+    dif_Corg_sc = scale(dif_Corg_percent, center = TRUE, scale = TRUE)[, 1],
+    condition = as.factor(condition),
+    triplet = as.factor(triplet)
+  )
+
+# Clean up intermediate objects
+rm(soil_depth_table)
+rm(varpart_healthy, varpart_nonhealthy)
+
+gc()
+
+# ==============================================================================
+#### CORRELATIONS ####
+# ==============================================================================
+
+# Prepare correlation analysis dataset
+soil_analyses_corr <- soil_analyses_table %>%
+  mutate(
+    triplet = as.numeric(triplet),
+    condition_num = as.numeric(factor(condition, levels = c("healthy", "ailing", "unstocked"), labels = c(1, 2, 3)))
+  ) %>%
+  dplyr::select(condition_num, triplet, elevation_m, northerness, Cstock_tperha, sd_Cstock)
+
+# Define variables for correlation analysis
+analysed_variables <- c(
+  "condition_num", "elevation_m", "northerness",
+  "Cstock_tperha", "sd_Cstock",     # Response variables
+  "soil_vol_cm3", "Corg_percent",   # Variables for variance partitioning
+  "triplet"                         # Random effect
+)
+
+soil_analyses_corr <- soil_analyses_corr %>%
+  subset(select = names(soil_analyses_corr) %in% analysed_variables)
+
+# Generate correlation matrix
+variables_corr <- names(soil_analyses_corr)[sapply(soil_analyses_corr, is.numeric)]
+corr_matrix <- Mypairs(soil_analyses_corr[, variables_corr])
+
+# ==============================================================================
+#### RESEARCH QUESTION 1: SOC STOCKS BY MOUNTAIN PINE HEALTH CATEGORY ####
+# ==============================================================================
+
+# --- MEAN SOC STOCKS ---
+
+# Fit linear mixed-effects model
+lmer_meanC <- lmer(
+  Cstock_log ~ 
+    condition * elevation_sc
+  + condition * northerness_sc
+  + (1 | triplet),
+  data = soil_analyses_table,
+  REML = TRUE
+)
+
+check_model(lmer_meanC)
+
+# estimate unstocked: -1.26916
+#   back-transforming: ((exp(4.10392-1.26916)/exp(4.10392))-1)*100 = -71.89 %
+# estimate ailing: 0.14398
+#   back-transforming: ((exp(4.10392+0.14398)/exp(4.10392))-1)*100 = 15.47 %
+
+# --- STD. DEV. SOC STOCKS ---
+
+lmer_sdC <- lmer(
+  sd_Cstock_log ~ 
+    condition * elevation_sc
+  + condition * northerness_sc
+  + (1 | triplet),
+  data = soil_analyses_table,
+  REML = TRUE
+)
+
+check_model(lmer_sdC)
+
+# estimate unstocked: -0.958191
+#   back-transforming: ((exp(3.289243-0.958191)/exp(3.289243))-1)*100 = -61.64 %
+# estimate ailing: 0.125930
+#   back-transforming: ((exp(3.289243+0.125930)/exp(3.289243))-1)*100 = 13.42 %
+
+# ==============================================================================
+#### RESEARCH QUESTION 2: VARIANCE PARTITIONING ####
+# ==============================================================================
+
+varpart_C <- varpart(
+  varpart_df$dif_Cstock_tperha,    # Response: SOC stock change
+  ~ dif_soil_vol_cm3,              # Explanatory variable 1: soil volume change
+  ~ dif_Corg_percent,              # Explanatory variable 2: organic carbon (%) change
+  data = varpart_df
+)
+
+summary(varpart_C)
+varpart_C$part                     # Relevant to check residuals
