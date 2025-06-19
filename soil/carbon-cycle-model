@@ -17,6 +17,11 @@
 #   - Young refractory pool (YR): Slow-decomposing deadwood
 #   - Soil organic matter (SOC): Stable carbon pool
 # 
+# RESEARCH QUESTION EXPLORED IN THIS SCRIPT:
+#   - when do soil organi carbon (SOC) dynamics reach a tipping point
+#       and shift from a carbon sink to the atmosphere (SOC gain)
+#       to a carbon source (SOC loss) after mountain pine death?
+#
 # ==============================================================================
 
 #### FIRST THINGS FIRST ####
@@ -51,7 +56,7 @@ library(cowplot)   # Plot arrangements
 # Based on (and equations refer to):
 # Andrén, O., and T. Kätterer (1997). ICBM: the introductory carbon balance
 # model for exploration of soil carbon balances. Ecological applications
-# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2     
+# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2      
 
 calculateYear <- function(
     InputLab_C,  # Input to the labile pool (litter) (t/ha)
