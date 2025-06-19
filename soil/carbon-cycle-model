@@ -51,7 +51,7 @@ library(cowplot)   # Plot arrangements
 # Based on (and equations refer to):
 # Andrén, O., and T. Kätterer (1997). ICBM: the introductory carbon balance
 # model for exploration of soil carbon balances. Ecological applications
-# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2
+# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2 
 
 calculateYear <- function(
     InputLab_C,  # Input to the labile pool (litter) (t/ha)
@@ -540,7 +540,7 @@ kobayashi_maru <- function(
   avg_data <- data.frame()
   elevations <- c("low", "intermediate", "high")
   unstocked_upper_CI <- c(30.5037, 32.1876, 67.581)
-
+  
   # Run simulations for each erosion year
   for (erosion_year in erosion_year_values) {
     sim_results <- simulate_dieoff(
@@ -566,13 +566,14 @@ kobayashi_maru <- function(
     SOC_start = numeric(),
     SOC_at_dieoff = numeric(),
     year_tipping_point = numeric(),
+    year_SOC_equals_start = numeric(),
     year_SOC_equals_unstocked = numeric()
   )
   
   for (elev in elevations) {
     elev_data <- subset(avg_data, elevation == elev)
-
-    # SOC at siomulation start and at mountain pine death
+    
+    # SOC at simulation start and at mountain pine death
     SOC_start <- SOC_C_init[which(elevations == elev)]
     SOC_at_dieoff <- elev_data$SOC_C[dieoff_dur]
     
@@ -582,7 +583,12 @@ kobayashi_maru <- function(
     post_max <- subset(elev_data, year > year_max)
     drop_below_max <- post_max$year[which(post_max$SOC_C < max_SOC)[1]]
     
-    # Find year where SOC is assumed unstocked (SOC crosses upper confidence interval)
+    # Find year when SOC falls below value of the start of the simulation
+    reversed_data <- elev_data[order(elev_data$year, decreasing = TRUE), ]
+    last_occurrence_year <- reversed_data$year[which(reversed_data$SOC_C >= SOC_start)[1]]
+    year_SOC_equals_start <- last_occurrence_year + 1
+    
+    # Find year when SOC is assumed unstocked (SOC crosses upper confidence interval)
     year_SOC_equals_unstocked <- which(
       elev_data$SOC_C <= unstocked_upper_CI[which(elevations == elev)]
     )
@@ -592,13 +598,14 @@ kobayashi_maru <- function(
       SOC_start = SOC_start,
       SOC_at_dieoff = SOC_at_dieoff,
       year_tipping_point = ifelse(!is.na(drop_below_max), drop_below_max, NA),
+      year_SOC_equals_start = ifelse(length(year_SOC_equals_start) > 0, min(year_SOC_equals_start), NA),
       year_SOC_equals_unstocked = ifelse(length(year_SOC_equals_unstocked) > 0, min(year_SOC_equals_unstocked), NA)
     ))
   }
   
-# Visualisation/publication plot
-
-# Ribbon parameters
+  # Visualisation/publication plot
+  
+  # Ribbon parameters
   create_ribbon_data <- function(avg_data, results_df) {
     ribbon_data <- data.frame()
     all_years <- sort(unique(avg_data$year))
@@ -736,7 +743,15 @@ kobayashi_maru <- function(
   middle_avg_SOC <- subset(avg_data, elevation == "intermediate")
   high_avg_SOC <- subset(avg_data, elevation == "high")
 
-  # Dataframe of simulation results
+  colnames(results_df) <- c(
+    "Elevation",
+    "SOC at year 1",
+    "SOC at die-off",
+    "Year Tipping point",
+    "Year SOC < value at year 1",
+    "Year SOC < unstocked threshold"
+  )
+  
   return(list(
     results_df = results_df,
     sensitivity_plot = sensitivity_plot,
@@ -744,7 +759,7 @@ kobayashi_maru <- function(
     middle_avg_SOC = middle_avg_SOC,
     high_avg_SOC = high_avg_SOC
   ))
-
+  
 }
 
 noerosion_sim <- kobayashi_maru(
