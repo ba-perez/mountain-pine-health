@@ -51,7 +51,7 @@ library(cowplot)   # Plot arrangements
 # Based on (and equations refer to):
 # Andrén, O., and T. Kätterer (1997). ICBM: the introductory carbon balance
 # model for exploration of soil carbon balances. Ecological applications
-# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2   
+# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2    
 
 calculateYear <- function(
     InputLab_C,  # Input to the labile pool (litter) (t/ha)
@@ -818,15 +818,6 @@ dieoff_10y <- kobayashi_maru(
 # --- DIFFERENT EROSION INTENSITIES (POWER), ALL ELSE FIXED ---
 
 # 0 erosion intensity (no erosion) is the same as noerosion_sim in previous section
-
-erosionpwr_00 <- kobayashi_maru(
-  erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
-  RE, foliage_C, woody_C, 
-  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
-  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
-  SOC_C_init = healthy_SOC, InputLab_f = iLab_unstocked, SOC_C_fin = unstocked_SOC,
-  dieoff_dur = 5, erosion_pwr = 0, sim_years = 175
-)
 
 # 10 % erosion intensity
 
