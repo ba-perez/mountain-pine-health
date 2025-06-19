@@ -51,11 +51,11 @@ library(cowplot)   # Plot arrangements
 # Based on (and equations refer to):
 # Andrén, O., and T. Kätterer (1997). ICBM: the introductory carbon balance
 # model for exploration of soil carbon balances. Ecological applications
-# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2       
+# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2        
 
 Kätterer, T. and O. Andrén (2001). The ICBM family of analytically solved models of soil carbon, ni-546
 trogen and microbial biomass dynamics — descriptions and application examples. en. Ecological547
-Modelling 136. doi: 10.1016/S0304-3800(00)00420-8,        [Titel anhand dieser DOI in Citavi-Projekt übernehmen]  pp. 191–207
+Modelling 136. doi: 10.1016/S0304-3800(00)00420-8,         [Titel anhand dieser DOI in Citavi-Projekt übernehmen]  pp. 191–207
 
 calculateYear <- function(
     InputLab_C,  # Input to the labile pool (litter) (t/ha)
@@ -399,27 +399,30 @@ simulate_dieoff <- function(
     total_deadwood <- woody_C[i]
     deadwood_input <- woody_C[i] / 10                                 # Woody C turned into deadwood after die-off
     years_since_dieoff <- 0                                           # Initialise counter for deadwood input
-    
-    for (year in 1:sim_years) {
-      if (year <= dieoff_dur) {                                       # Litter input during die-off
 
-        InputLab <- InputLab + foliage_loss
-        InputRef <- InputRef
+    # Annual simulation loop
+    for (year in 1:sim_years) {
+
+      # --- PHASE 1: DIE-OFF PERIOD ---
+      if (year <= dieoff_dur) {
+
+        InputLab <- InputLab + foliage_loss                           # Increased labile input
+        InputRef <- InputRef                                          # Refractory input remains normal
 
       }
 
-      if (year > dieoff_dur) {                                        # Inputs after mountain pine death
+      # --- PHASE 2: POST-DEATH PERIOD ---
+      if (year > dieoff_dur) {
 
-        InputLab <- InputLab_final
-        
-        # Deadwood input
+        InputLab <- InputLab_final                                    # Reduced labile input
         years_since_dieoff <- years_since_dieoff + 1                  # Counter: years since die-off
         
         if (years_since_dieoff <= 10) {
-          
+          # Deadwood input period
           if (years_since_dieoff == erosion_year) {
-            
-            SOC_C <- SOC_C * (1 - erosion_pwr)                         # Remove fraction of SOC_C depending on erosion power
+          # Apply erosion to remaining SOC and deadwood
+
+            SOC_C <- SOC_C * (1 - erosion_pwr)
 
             deadwood_input <- (
               (deadwood_input * (10 + 1 - erosion_year))               # Deadwood still available
@@ -433,13 +436,13 @@ simulate_dieoff <- function(
           InputRef <- deadwood_input
           
         } else {
-          
-          InputRef <- 0                                               # No more deadwood input after 10 years since death
+          # No more deadwood inputs after 10 years since death
+          InputRef <- 0
           
         }
       }
       
-      # Calculate new carbon pools w/ single loop
+      # Calculate new carbon pools after this year
       year_results <- calculateYear(
         InputLab_C = InputLab,
         InputRef_C = InputRef,
@@ -468,7 +471,7 @@ simulate_dieoff <- function(
     
   }
 
-  # Plotting parameters
+  # Visualisation
   combined_plot <- ggplot(plot_df, aes(x = year, y = SOC_C, colour = elevation, group = elevation)) +
     geom_line() +
     geom_point() +
@@ -505,34 +508,25 @@ simulate_dieoff <- function(
   ))
 }
 
-sim_years = 750
+# --- COMPREHENSIVE CARBON CYCLE SIMULATION ---
+# -------------- (MAIN FUNCTION) --------------
 
-dieoff_results <- simulate_dieoff(
-  RE, foliage_C, woody_C,
-  InputLab_C, InputRef_C,  YL_C_init, YR_C_init,
-  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
-  SOC_C_init = healthy_SOC,
-  InputLab_f = iLab_unstocked,
-  dieoff_dur = 5,
-  erosion_pwr = 0.2,
-  erosion_year = 5,
-  sim_years = sim_years
-)
+# Function kobayashi_maru:
+# Simulates carbon cycle based on function simulate_dieoff
+# Calculates erosion effect as the mean of every erosion
+#    event happening yearly over 10 years
+# Calculates key transition points:
+# - Tipping point: When SOC drops below the highest value
+#    reached in the simulation (begin of carbon sink)
+# - Unstocked threshold: When SOC reaches unstocked steady-state
+# This function generates the main results presented in the publication.
 
-#dieoff_results$plot
-
-# the function below calculates the mean erosion over 10 years
-# by iteratively running the function above, simulate_dieoff
-# it also identified the years of tipping point and unstocked SOC
-# this is the final function which generated the results published
-
-macarena <- function(
+kobayashi_maru <- function(
     erosion_year_values, RE, foliage_C, 
     woody_C, InputLab_C, InputRef_C, 
     YL_C_init, YR_C_init, sp, Ko, Kyl, Kyr, 
     SOC_C_init, InputLab_f, SOC_C_fin,
-    dieoff_dur, erosion_pwr,
-    alpha_ind_yrs, sim_years
+    dieoff_dur, erosion_pwr, sim_years
 ) {
   
   results_df <- data.frame(
@@ -548,7 +542,8 @@ macarena <- function(
   avg_data <- data.frame()
   elevations <- c("low", "intermediate", "high")
   unstocked_upper_CI <- c(30.5037, 32.1876, 67.581)
-  
+
+  # Run simulations for each erosion year
   for (erosion_year in erosion_year_values) {
     sim_results <- simulate_dieoff(
       RE, foliage_C, woody_C,
@@ -562,7 +557,7 @@ macarena <- function(
     plot_data <- rbind(plot_data, sim_results)
   }
   
-  # Create averaged data by elevation and year
+  # Calculate mean SOC trajectories across years
   avg_data <- plot_data %>% 
     group_by(elevation, year) %>% 
     summarise(SOC_C = mean(SOC_C), .groups = 'drop')
@@ -694,7 +689,7 @@ macarena <- function(
                 fill = "grey60", alpha = 0.5) +
     geom_line(data = plot_data, aes(x = year, y = SOC_C, 
                                     group = interaction(elevation, erosion_year)),
-              color = "grey60", alpha = alpha_ind_yrs, linewidth = 1) +
+              color = "grey60", alpha = 0, linewidth = 1) +
     geom_line(data = avg_data, aes(x = year, y = SOC_C, 
                                    color = elevation, group = elevation),
               linewidth = 3) +
@@ -753,98 +748,90 @@ macarena <- function(
 
 }
 
-noerosion_sim <- macarena(
+noerosion_sim <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
   RE, foliage_C, woody_C, 
   InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
   sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
   SOC_C_init = healthy_SOC, InputLab_f = iLab_unstocked, SOC_C_fin = unstocked_SOC,
-  dieoff_dur = 5, erosion_pwr = 0,
-  alpha_ind_yrs = 0, sim_years = 175
+  dieoff_dur = 5, erosion_pwr = 0, sim_years = 175
 )
 
-erosion_sim <- macarena(
+erosion_sim <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
   RE, foliage_C, woody_C, 
   InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
   sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
   SOC_C_init = healthy_SOC, InputLab_f = iLab_unstocked, SOC_C_fin = unstocked_SOC,
-  dieoff_dur = 5, erosion_pwr = 0.2,
-  alpha_ind_yrs = 0, sim_years = 175
+  dieoff_dur = 5, erosion_pwr = 0.2, sim_years = 175
 )
 
 # Sensitivity analyses:
 
 # 2-year dieoff, all else fixed
 
-dieoff_2y <- macarena(
+dieoff_2y <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
   RE, foliage_C, woody_C, 
   InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
   sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
   SOC_C_init = healthy_SOC, InputLab_f = iLab_unstocked, SOC_C_fin = unstocked_SOC,
-  dieoff_dur = 2, erosion_pwr = 0.2,
-  alpha_ind_yrs = 0.1, sim_years = 150
+  dieoff_dur = 2, erosion_pwr = 0.2, sim_years = 150
 )
 
 # 5-year dieoff, all else fixed
 
-dieoff_5y <- macarena(
+dieoff_5y <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
   RE, foliage_C, woody_C, 
   InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
   sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
   SOC_C_init = healthy_SOC, InputLab_f = iLab_unstocked, SOC_C_fin = unstocked_SOC,
-  dieoff_dur = 5, erosion_pwr = 0.2,
-  alpha_ind_yrs = 0.1, sim_years = 150
+  dieoff_dur = 5, erosion_pwr = 0.2, sim_years = 150
 )
 
 # 10-year dieoff, all else fixed
 
-dieoff_10y <- macarena(
+dieoff_10y <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
   RE, foliage_C, woody_C, 
   InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
   sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
   SOC_C_init = healthy_SOC, InputLab_f = iLab_unstocked, SOC_C_fin = unstocked_SOC,
-  dieoff_dur = 10, erosion_pwr = 0.2,
-  alpha_ind_yrs = 0.1, sim_years = 150
+  dieoff_dur = 10, erosion_pwr = 0.2, sim_years = 150
 )
 
 # 0 erosion power, all else fixed
 
-erosionpwr_00 <- macarena(
+erosionpwr_00 <- kobayashi_maru(
   erosion_year_values = c(5, 5, 5, 5, 5, 5, 5, 5, 5, 5), 
   RE, foliage_C, woody_C, 
   InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
   sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
   SOC_C_init = healthy_SOC, InputLab_f = iLab_unstocked, SOC_C_fin = unstocked_SOC,
-  dieoff_dur = 5, erosion_pwr = 0,
-  alpha_ind_yrs = 0.1, sim_years = 175
+  dieoff_dur = 5, erosion_pwr = 0, sim_years = 175
 )
 
 # 10 % erosion power, all else fixed
 
-erosionpwr_01 <- macarena(
+erosionpwr_01 <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
   RE, foliage_C, woody_C, 
   InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
   sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
   SOC_C_init = healthy_SOC, InputLab_f = iLab_unstocked, SOC_C_fin = unstocked_SOC,
-  dieoff_dur = 5, erosion_pwr = 0.1,
-  alpha_ind_yrs = 0.1, sim_years = 150
+  dieoff_dur = 5, erosion_pwr = 0.1, sim_years = 150
 )
 
 # 40 % erosion power, all else fixed
 
-erosionpwr_04 <- macarena(
+erosionpwr_04 <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
   RE, foliage_C, woody_C, 
   InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
   sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
   SOC_C_init = healthy_SOC, InputLab_f = iLab_unstocked, SOC_C_fin = unstocked_SOC,
-  dieoff_dur = 5, erosion_pwr = 0.4,
-  alpha_ind_yrs = 0.1, sim_years = 150
+  dieoff_dur = 5, erosion_pwr = 0.4, sim_years = 150
 )
 
 #### CODE FOR SUPPLEMENTARY PLOT ####
