@@ -51,11 +51,7 @@ library(cowplot)   # Plot arrangements
 # Based on (and equations refer to):
 # Andrén, O., and T. Kätterer (1997). ICBM: the introductory carbon balance
 # model for exploration of soil carbon balances. Ecological applications
-# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2         
-
-Kätterer, T. and O. Andrén (2001). The ICBM family of analytically solved models of soil carbon, ni-546
-trogen and microbial biomass dynamics — descriptions and application examples. en. Ecological547
-Modelling 136. doi: 10.1016/S0304-3800(00)00420-8,          [Titel anhand dieser DOI in Citavi-Projekt übernehmen]  pp. 191–207
+# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2
 
 calculateYear <- function(
     InputLab_C,  # Input to the labile pool (litter) (t/ha)
