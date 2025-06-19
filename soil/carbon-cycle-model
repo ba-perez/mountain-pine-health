@@ -51,11 +51,11 @@ library(cowplot)   # Plot arrangements
 # Based on (and equations refer to):
 # Andrén, O., and T. Kätterer (1997). ICBM: the introductory carbon balance
 # model for exploration of soil carbon balances. Ecological applications
-# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2        
+# 7.4: 1226-1236. doi: 10.1890/1051-0761(1997)007[1226:ITICBM]2.0.CO;2         
 
 Kätterer, T. and O. Andrén (2001). The ICBM family of analytically solved models of soil carbon, ni-546
 trogen and microbial biomass dynamics — descriptions and application examples. en. Ecological547
-Modelling 136. doi: 10.1016/S0304-3800(00)00420-8,         [Titel anhand dieser DOI in Citavi-Projekt übernehmen]  pp. 191–207
+Modelling 136. doi: 10.1016/S0304-3800(00)00420-8,          [Titel anhand dieser DOI in Citavi-Projekt übernehmen]  pp. 191–207
 
 calculateYear <- function(
     InputLab_C,  # Input to the labile pool (litter) (t/ha)
@@ -338,6 +338,8 @@ iLab_unstocked <- c(3.976052, 1.424955, 1.692694)
 #### SIMULATE CARBON CYCLE UPON DIE-OFF ####
 ###############################################################################
 
+# --- BASIC CARBON CYCLE SIMULATION ---
+
 # Function simulate_dieoff:
 # Simulates carbon dynamics following mountain pine die-off, including:
 # - Start at healthy carbon steady-state
@@ -573,7 +575,8 @@ kobayashi_maru <- function(
   
   for (elev in elevations) {
     elev_data <- subset(avg_data, elevation == elev)
-    
+
+    # SOC at siomulation start and at mountain pine death
     SOC_start <- SOC_C_init[which(elevations == elev)]
     SOC_at_dieoff <- elev_data$SOC_C[dieoff_dur]
     
@@ -583,7 +586,7 @@ kobayashi_maru <- function(
     post_max <- subset(elev_data, year > year_max)
     drop_below_max <- post_max$year[which(post_max$SOC_C < max_SOC)[1]]
     
-    # Find year where SOC is assumed unstocked (SOC within upper confidence interval)
+    # Find year where SOC is assumed unstocked (SOC crosses upper confidence interval)
     year_SOC_equals_unstocked <- which(
       elev_data$SOC_C <= unstocked_upper_CI[which(elevations == elev)]
     )
@@ -597,7 +600,7 @@ kobayashi_maru <- function(
     ))
   }
   
-# Plotting
+# Visualisation/publication plot
 
 # Ribbon parameters
   create_ribbon_data <- function(avg_data, results_df) {
@@ -731,8 +734,8 @@ kobayashi_maru <- function(
       axis.text.y = element_text(size = 20, colour = "grey50")
     )
   
-  # avg_data in individual dataframes by elevation
-  # Relevant to generate supplementary sensitivity plot later
+  # Separate elevation data for supplementary sensitivity analyses
+  # (see next section)
   low_avg_SOC <- subset(avg_data, elevation == "low")
   middle_avg_SOC <- subset(avg_data, elevation == "intermediate")
   high_avg_SOC <- subset(avg_data, elevation == "high")
@@ -766,9 +769,18 @@ erosion_sim <- kobayashi_maru(
   dieoff_dur = 5, erosion_pwr = 0.2, sim_years = 175
 )
 
-# Sensitivity analyses:
+###############################################################################
+#### SENSITIVITY ANALYSES ####
+###############################################################################
 
-# 2-year dieoff, all else fixed
+# Apply function kobayashi_maru with different parameters
+# for the duration of mountain pine die-off
+# and intensity of SOC removal by erosion intensity
+# for supplementary data
+
+# --- DIFFERENT DIE-OFF DURATIONS, ALL ELSE FIXED ---
+
+# 2-year dieoff
 
 dieoff_2y <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
@@ -779,18 +791,9 @@ dieoff_2y <- kobayashi_maru(
   dieoff_dur = 2, erosion_pwr = 0.2, sim_years = 150
 )
 
-# 5-year dieoff, all else fixed
+# 5-year dieoff is the same as erosion_sim in previous section
 
-dieoff_5y <- kobayashi_maru(
-  erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
-  RE, foliage_C, woody_C, 
-  InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
-  sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
-  SOC_C_init = healthy_SOC, InputLab_f = iLab_unstocked, SOC_C_fin = unstocked_SOC,
-  dieoff_dur = 5, erosion_pwr = 0.2, sim_years = 150
-)
-
-# 10-year dieoff, all else fixed
+# 10-year dieoff
 
 dieoff_10y <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
@@ -801,10 +804,12 @@ dieoff_10y <- kobayashi_maru(
   dieoff_dur = 10, erosion_pwr = 0.2, sim_years = 150
 )
 
-# 0 erosion power, all else fixed
+# --- DIFFERENT EROSION INTENSITIES (POWER), ALL ELSE FIXED ---
+
+# 0 erosion intensity (no erosion) is the same as noerosion_sim in previous section
 
 erosionpwr_00 <- kobayashi_maru(
-  erosion_year_values = c(5, 5, 5, 5, 5, 5, 5, 5, 5, 5), 
+  erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
   RE, foliage_C, woody_C, 
   InputLab_C, InputRef_C, YL_C_init, YR_C_init, 
   sp = sp_list, Ko = healthyKo, Kyl = healthyKyl, Kyr = healthyKyr,
@@ -812,7 +817,7 @@ erosionpwr_00 <- kobayashi_maru(
   dieoff_dur = 5, erosion_pwr = 0, sim_years = 175
 )
 
-# 10 % erosion power, all else fixed
+# 10 % erosion intensity
 
 erosionpwr_01 <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
@@ -823,7 +828,9 @@ erosionpwr_01 <- kobayashi_maru(
   dieoff_dur = 5, erosion_pwr = 0.1, sim_years = 150
 )
 
-# 40 % erosion power, all else fixed
+# 20 % erosion intensity is the same as erosion_sim in previous section
+
+# 40 % erosion intensity
 
 erosionpwr_04 <- kobayashi_maru(
   erosion_year_values = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 
@@ -834,9 +841,11 @@ erosionpwr_04 <- kobayashi_maru(
   dieoff_dur = 5, erosion_pwr = 0.4, sim_years = 150
 )
 
-#### CODE FOR SUPPLEMENTARY PLOT ####
+# --- CODE FOR SUPPLEMENTARY SENSITIVITY PLOT ---
 
-# different die-off durations:
+# Plot results of each sensitivity analysis above
+
+# Die-off durations:
 
 low_2y <- dieoff_2y$low_avg_SOC %>% mutate(elevation = "low", dieoff_dur = "2y")
 middle_2y <- dieoff_2y$middle_avg_SOC %>% mutate(elevation = "intermediate", dieoff_dur = "2y")
@@ -900,7 +909,7 @@ supp_dieoff_plot <- ggplot(supp_dieoff, aes(
   ) + 
   guides(alpha = "none")
 
-# different erosion intensities:
+# Erosion intensities:
 
 low_01 <- erosionpwr_01$low_avg_SOC %>% mutate(elevation = "low", erosion_pwr = "10%")
 middle_01 <- erosionpwr_01$middle_avg_SOC %>% mutate(elevation = "intermediate", erosion_pwr = "10%")
