@@ -13,7 +13,7 @@ This repository contains R code for analysing soil organic carbon (SOC) dynamics
 - **Statistical analyses**: Linear mixed-effects models across three elevation bands (≤1300m, 1300-1500m, >1500m a.s.l.) and variation partitioning
 - **Carbon cycle simulation**: Three-pool soil organic carbon model (labile, refractory, SOC) parameterised from field and iLand data, with sensitivity analyses for varying mountain pine die-off durations and erosion intensities.
 
-## QRepository structure
+## Repository structure
 
 `├── carbon_stock_analysis.R      # Statistical analyses`<br>
 `└── soil_carbon_simulation.R     # Three-pool soil organic carbon model`
