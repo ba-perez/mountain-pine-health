@@ -44,12 +44,6 @@ This repository contains R code for analysing soil organic carbon (SOC) dynamics
 If you use this code, please cite:
 [publication details]
 
-##  Code authors
-
-- **Barbara M. P. B. de Araujo** - Statistical analysis, field data integration, simulation of SOC dynamics
-- **Werner Rammer** - iLand source code
-- **Christina Dollinger** - iLand data processing
-
 ## Licence
 
 GNU General Public License v3.0
