@@ -56,7 +56,7 @@ GNU General Public License v3.0
 
 ## Contact
 
-For questions about the code or methodology, please contact:
+For questions about the code or methodology, please contact: <br>
 Barbara M. P. B. de Araújo (barbara.araujo@tum.de)
 
 ---
