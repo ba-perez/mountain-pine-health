@@ -15,8 +15,8 @@ This repository contains R code for analysing soil organic carbon (SOC) dynamics
 
 ## Repository structure
 
-`├── carbon_stock_analysis.R      # Statistical analyses`<br>
-`└── soil_carbon_simulation.R     # Three-pool soil organic carbon model`
+`├── statistical-analyses.R      # Statistical analyses`<br>
+`└── carbon-cycle-model.R        # Three-pool soil organic carbon model`
 
 ## Quick Start Guide
 
