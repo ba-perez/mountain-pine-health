@@ -22,32 +22,8 @@ This repository contains R code for analysing soil organic carbon (SOC) dynamics
 
 ### Prerequisites
 
-- **Installed R Packages:** readxl, tidyverse, lme4, sjPlot, vegan, AICcmodavg, MuMIn, performance, DHARMa, ggplot2, gridExtra, cowplot
-- **External code:** HighstatLibV13.r (Zuur et al., 2010)
-
-## Data Structure
-
-### Required columns
-
-- `plot_id`: Unique plot identifier
-- `condition`: Mountain pine health status (healthy, ailing, unstocked)
-- `triplet`: Plot grouping ID; each group includes one plot condition
-- `elevation_m`: Elevation in metres
-- `northerness`: Aspect as northerness value
-- `Cstock_tperha`: Organic carbon stock in tonnes per hectare
-- `sd_Cstock`: Standard deviation of organic carbon stock
-- `cv_Cstock`: Coefficient of variation of organic carbon stock
-- `soil_vol_cm3`: Sampled soil volume in cubic centimetres
-- `Corg_percent`: Percentage of organic carbon in the soil sample
-
-### Model Parameters
-
-**Three carbon pools (tonnes/ha):**
-- **Young Labile:** Fast-decomposing organic matter (e.g. litter)
-- **Young Refractory:** Slow-decomposing organic matter (e.g. deadwood)
-- **Soil Organic Carbon:** Stabilised soil organic matter
-
-Parameters are elevation-specific and derived from field measurements and iLand simulations.
+- **Installed R Packages:** `readxl`, `tidyverse`, `lme4`, `sjPlot`, `vegan`, `AICcmodavg`, `MuMIn`, `performance`, `DHARMa`, `ggplot2`, `gridExtra`, `cowplot`
+- **External code:** `HighstatLibV13.r` (Zuur et al., 2010)
 
 ## Key Functions
 
@@ -57,6 +33,7 @@ Parameters are elevation-specific and derived from field measurements and iLand 
 
 ## Key outputs
 
+- Fixed effect estimates for how mountain pine condition other predictors affect SOC stocks
 - Variance partitioning of SOC drivers
 - Simulations of SOC dynamics following mountain pine die-off by elevation
 - Timing until SOC pools transition from sink to source as well as to the new, unstocked stable state
