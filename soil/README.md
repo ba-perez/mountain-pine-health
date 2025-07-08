@@ -1,57 +1,34 @@
 # Soil Carbon Dynamics Following Mountain Pine Die-off
 
-This repository contains R code for analysing soil organic carbon (SOC) dynamics across elevation gradients following mountain pine death.
-We here integrate field and forest simulation data to understand carbon cycling responses to large-scale mountain pine die-off.
+This repository contains R code for analysing soil organic carbon (SOC) dynamics across elevation gradients following mountain pine die-off. The code integrates field measurements and forest landscape simulations from the model iLand (Seidl et al., 2012).
 
-## Research Overview
+## Research Questions
 
-**Primary Research Questions:**
-1. How does declining mountain pine health influence SOC stocks and spatial variability?
+1. How does declining mountain pine health influence SOC stocks and SOC spatial variability?
 2. To what extent do changes in soil volume and soil carbon concentration drive changes in SOC stocks?
 3. When do soil organic carbon dynamics reach a tipping point and shift from a carbon sink to a carbon source after mountain pine death?
 
-## Repository Contents
+## Methods
 
-### Analysis Scripts
+- **Statistical analyses**: Linear mixed-effects models across three elevation bands (≤1300m, 1300-1500m, >1500m a.s.l.) and variation partitioning
+- **Carbon cycle simulation**: Three-pool soil organic carbon model (labile, refractory, SOC) parameterised from field and iLand data, with sensitivity analyses for varying mountain pine die-off durations and erosion intensities.
 
-1. **`carbon_stock_analysis.R`** - Statistical analysis of field and laboratory data
-2. **`soil_carbon_simulation.R`** - Three-pool soil carbon model simulation
+## QRepository structure
 
-### Key Features
-
-- **Statistical methods**: Linear mixed-effects modelling and variation partitioning
-- **Carbon cycle simulation**: Three-pool model (labile, refractory, soil organic carbon)
-- **Sensitivity analyses**: Simulation of possible carbon cycle scenarios, including different rates of mountain pine die-off and of soil erosion intensity after mountain pine death
-- **Analysis and simulation throughout an elevation gradient**: Low (<= 1300 m a.s.l.), intermediate (between 1300 and 1500 m a.s.l.), and high (> 1500 m a.s.l.)
+├── carbon_stock_analysis.R      # Statistical analyses
+└── soil_carbon_simulation.R     # Three-pool soil organic carbon model
 
 ## Quick Start Guide
 
 ### Prerequisites
 
-**Required R Packages:**
-```r
-# Data manipulation and analysis
-install.packages(c("readxl", "tidyverse", "tidyr", "broom", "dplyr"))
-
-# Statistical modelling
-install.packages(c("lme4", "sjPlot", "vegan", "AICcmodavg", "MuMIn"))
-
-# Model diagnostics
-install.packages(c("performance", "DHARMa"))
-
-# Visualisation
-install.packages(c("ggplot2", "gridExtra", "grid", "cowplot"))
-```
-
-**Additional Requirements:**
-- Dataset with soil measurements and mountain pine health classifications
-- `HighstatLibV13.r` script for correlation analysis (available from Zuur et al., 2010: doi.org/10.1111/j.2041-210X.2009.00001.x)
+- **Installed R Packages:** readxl, tidyverse, lme4, sjPlot, vegan, AICcmodavg, MuMIn, performance, DHARMa, ggplot2, gridExtra, cowplot
+- **External code:** HighstatLibV13.r (Zuur et al., 2010)
 
 ## Data Structure
 
-### Input Data
+### Required columns
 
-The dataset should contain the following columns:
 - `plot_id`: Unique plot identifier
 - `condition`: Mountain pine health status (healthy, ailing, unstocked)
 - `triplet`: Plot grouping ID; each group includes one plot condition
@@ -65,51 +42,25 @@ The dataset should contain the following columns:
 
 ### Model Parameters
 
-The simulation uses three carbon pools, in tonnes per hectare:
-- **Young Labile (YL)**: Fast-decomposing, e.g. litter
-- **Young Refractory (YR)**: Slow-decomposing, e.g. deadwood  
-- **Soil organic carbon (SOC)**: Soil organic matter
+**Three carbon pools (tonnes/ha):**
+- **Young Labile:** Fast-decomposing organic matter (e.g. litter)
+- **Young Refractory:** Slow-decomposing organic matter (e.g. deadwood)
+- **Soil Organic Carbon:** Stabilised soil organic matter
 
-Parameters are elevation-specific and derived from:
-- Field measurements (this study)
-- iLand simulation data
+Parameters are elevation-specific and derived from field measurements and iLand simulations.
 
 ## Key Functions
 
-### Statistical analysis (`carbon_stock_analysis.R`)
+- **`check_model()`**: Custom model diagnostics (e.g. AICc, R², residuals)
+- **`Mypairs()`**: correlation matrix plots adapted from Zuur et al. (2010)
+- **`kobayashi_maru()`**: Main SOC simulation, also outputs the time until carbon tipping points and transition thresholds
 
-- **`check_model()`**: Custom model diagnostics including AICc, R², and residual analysis
-- **`Mypairs()`**: Publication-ready correlation matrix plots adapted from Zuur et al. (2010)
+## Key outputs
 
-### Carbon cycle simulation (`soil_carbon_simulation.R`)
-
-- **`kobayashi_maru()`**: Main SOC simulation function, also outputs the time until carbon tipping points and transition thresholds
-
-## Results and Outputs
-
-### Statistical analysis
-- Correlation matrices
-- Linear mixed-effects model summaries
-- Diagnostic plots and residual analyses
-- Variance partitioning results
-
-### Carbon cycle simulation
-- Elevation-specific long-term SOC trajectory plots
-- Identification of carbon sink-to-source transition points
-- Sensitivity analyses for different die-off durations and erosion scenarios
-
-## Interpretation Guide
-
-### Key Transition Points
-- **Tipping Point**: Year when SOC begins declining from its highest post-disturbance value, becoming a carbon source
-- **Unstocked Threshold**: Year when SOC reaches levels observed in our unstocked plots
-
-## Scientific Background
-
-The research associated with this script addresses important knowledge gaps in mountain pine carbon dynamics under the threat of climate change, including:
-- Elevation-dependent as well as ecosystem-level SOC responses to widespread mountain pine die-off
-- Long-term effects of mountain pine die-off on the soil carbon cycle
-- Possible erosion impacts following loss of mountain pine vegetation cover
+- Variance partitioning of SOC drivers
+- Simulations of SOC dynamics following mountain pine die-off by elevation
+- Timing until SOC pools transition from sink to source as well as to the new, unstocked stable state
+- Sensitivity analyses for different disturbance scenarios
 
 ## Citation
 
@@ -118,9 +69,9 @@ If you use this code, please cite:
 
 ##  Code authors
 
-- **Barbara M. P. B. de Araujo** - Statistical analysis and field data integration
-- **Werner Rammer** - iLand forest simulation code
-- **Christina Dollinger** - iLand simulation data
+- **Barbara M. P. B. de Araujo** - Statistical analysis, field data integration, simulation of SOC dynamics
+- **Werner Rammer** - iLand source code
+- **Christina Dollinger** - iLand data processing
 
 ## Licence
 
