@@ -704,7 +704,7 @@ kobayashi_maru <- function(
     geom_line(data = avg_data, aes(x = year, y = SOC_C, 
                                    color = elevation, group = elevation),
               linewidth = 3) +
-    labs(x = "Year", y = expression(bold(SOC~(std.~dev.~t~ha^{-1}))), colour = "Elevation") +
+    labs(x = "Year", y = expression(bold(SOC~(SOC~(t~ha^{-1}))), colour = "Elevation") +
     scale_colour_manual(values = c("low" = "skyblue2", "intermediate" = "royalblue2", "high" = "darkblue"), 
                         limits = c("high", "intermediate", "low")) +
     scale_x_continuous(
