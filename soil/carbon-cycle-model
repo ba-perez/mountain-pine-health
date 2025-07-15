@@ -981,9 +981,7 @@ supp_erosion_plot <- ggplot(supp_erosion, aes(
   guides(alpha = "none")
 
 ggarrange(
-  supp_dieoff_plot + theme(plot.margin = margin(10, 30, 10, 30)),
-  supp_erosion_plot + theme(plot.margin = margin(10, 30, 10, 30)),
+  noerosion_plot + labs(tag = "A") + theme(plot.margin = margin(10, 30, 10, 30), plot.tag = element_text(size = 24, face = "bold")),
+  erosion_plot + labs(tag = "B") + theme(plot.margin = margin(10, 30, 10, 30), plot.tag = element_text(size = 24, face = "bold")),
   ncol = 2
 )
-grid.text("A", x = unit(0.006, "npc"), y = unit(0.98, "npc"), gp = gpar(fontsize = 20, fontface = "bold"))
-grid.text("B", x = unit(0.505, "npc"), y = unit(0.98, "npc"), gp = gpar(fontsize = 20, fontface = "bold"))
